@@ -1,0 +1,33 @@
+{
+  "name": "farmer-bidding-platform",
+  "version": "1.0.0",
+  "description": "Full-stack farmer-buyer bidding platform with real-time auctions",
+  "main": "index.js",
+  "scripts": {
+    "dev": "concurrently \"npm run server:dev\" \"npm run client:dev\"",
+    "server:dev": "cd backend && npm run dev",
+    "client:dev": "cd frontend && npm run dev",
+    "server:build": "cd backend && npm run build",
+    "client:build": "cd frontend && npm run build",
+    "install:all": "npm install && cd backend && npm install && cd ../frontend && npm install",
+    "migrate": "cd backend && npx prisma migrate dev",
+    "generate": "cd backend && npx prisma generate",
+    "seed": "cd backend && npm run seed"
+  },
+  "keywords": [
+    "farming",
+    "bidding",
+    "auction",
+    "real-time",
+    "nodejs",
+    "react"
+  ],
+  "author": "Farmer Bidding Platform Team",
+  "license": "MIT",
+  "devDependencies": {
+    "concurrently": "^8.2.2"
+  },
+  "dependencies": {
+    "socket.io-client": "^4.8.1"
+  }
+}

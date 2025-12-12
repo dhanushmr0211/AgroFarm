@@ -1,0 +1,374 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id                      String   @id @default(cuid())
+  email                   String   @unique
+  password                String
+  name                    String
+  phone                   String?
+  address                 String?
+  profileImage            String?
+  role                    String   @default("BUYER") // FARMER, BUYER, ADMIN
+  isActive                Boolean  @default(true)
+  apmcId                  String?
+  notificationPreferences String?  @default("{\"bidUpdates\": true, \"auctionStart\": true, \"auctionEnd\": true, \"paymentUpdates\": true, \"orderUpdates\": true, \"marketing\": false}")
+  createdAt               DateTime @default(now())
+  updatedAt               DateTime @updatedAt
+
+  // Relations
+  apmc             APMC?               @relation(fields: [apmcId], references: [id])
+  produce          Produce[]           @relation("FarmerProduce")
+  bids             Bid[]
+  transactions     Transaction[]
+  buyerOrders      Order[]             @relation("BuyerOrders")
+  farmerOrders     Order[]             @relation("FarmerOrders")
+  reviewsGiven     Review[]            @relation("ReviewerReviews")
+  reviewsReceived  Review[]            @relation("RevieweeReviews")
+  wallet           Wallet?
+  deviceTokens     DeviceToken[]
+  notifications    Notification[]
+  bookingRequests  BookingRequest[]
+  reviewedBookings BookingRequest[]    @relation("BookingReviewer")
+  chatMessages     ChatMessage[]
+  escrowAsFarmer   EscrowTransaction[] @relation("EscrowFarmer")
+  escrowAsBuyer    EscrowTransaction[] @relation("EscrowBuyer")
+  SpotRegistration SpotRegistration[]
+
+  @@index([role])
+  @@index([apmcId])
+}
+
+model APMC {
+  id           String   @id @default(cuid())
+  name         String
+  location     String
+  state        String
+  pincode      String?
+  contactEmail String?
+  contactPhone String?
+  isActive     Boolean  @default(true)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  // Relations
+  users          User[]
+  produce        Produce[]
+  AuctionSession AuctionSession[]
+
+  @@unique([name, location])
+}
+
+model Produce {
+  id               String    @id @default(cuid())
+  title            String
+  description      String?
+  category         String // GRAINS, VEGETABLES, FRUITS, SPICES, PULSES, OILSEEDS, DAIRY, ORGANIC
+  variety          String?
+  quantity         Float
+  unit             String    @default("kg")
+  basePrice        Float
+  currentBid       Float?
+  grade            String? // A, B, C, PREMIUM, STANDARD
+  harvestDate      DateTime?
+  shelfLife        Int? // in days
+  storageTemp      String?
+  certification    String?
+  images           String? // JSON string array
+  farmerId         String
+  apmcId           String?
+  pickupLocation   String?
+  auctionStartTime DateTime
+  auctionEndTime   DateTime
+  status           String    @default("UPCOMING") // UPCOMING, LIVE, COMPLETED, CANCELLED
+  winningBidId     String?   @unique
+  sessionId        String?
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+
+  // Relations
+  farmer     User            @relation("FarmerProduce", fields: [farmerId], references: [id])
+  apmc       APMC?           @relation(fields: [apmcId], references: [id])
+  bids       Bid[]
+  winningBid Bid?            @relation("WinningBid", fields: [winningBidId], references: [id])
+  orders     Order[]
+  session    AuctionSession? @relation(fields: [sessionId], references: [id])
+
+  @@index([farmerId])
+  @@index([apmcId])
+  @@index([status])
+  @@index([category])
+  @@index([auctionStartTime])
+  @@index([auctionEndTime])
+  @@index([sessionId])
+}
+
+model Bid {
+  id            String   @id @default(cuid())
+  amount        Float
+  quantity      Float
+  bidderId      String
+  produceId     String
+  status        String   @default("ACTIVE") // ACTIVE, OUTBID, WON, LOST, CANCELLED
+  paymentStatus String   @default("PENDING") // PENDING, PAID, FAILED, REFUNDED
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  // Relations
+  bidder            User               @relation(fields: [bidderId], references: [id])
+  produce           Produce            @relation(fields: [produceId], references: [id])
+  wonProduce        Produce?           @relation("WinningBid")
+  transactions      Transaction[]
+  orders            Order[]
+  history           BidHistory[]
+  escrowTransaction EscrowTransaction?
+
+  @@index([bidderId])
+  @@index([produceId])
+  @@index([status])
+  @@index([amount])
+}
+
+model BidHistory {
+  id        String   @id @default(cuid())
+  bidId     String
+  amount    Float
+  timestamp DateTime @default(now())
+
+  // Relations
+  bid Bid @relation(fields: [bidId], references: [id])
+
+  @@index([bidId])
+  @@index([timestamp])
+}
+
+model AuctionSession {
+  id              String   @id @default(cuid())
+  apmcId          String
+  category        String
+  startTime       DateTime
+  endTime         DateTime
+  status          String   @default("SCHEDULED") // SCHEDULED, LIVE, COMPLETED, CANCELLED
+  capacityFarmers Int      @default(50)
+  capacityBuyers  Int      @default(100)
+  createdBy       String
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  // Relations
+  apmc               APMC                @relation(fields: [apmcId], references: [id])
+  registrations      SpotRegistration[]
+  produce            Produce[]
+  bookingRequests    BookingRequest[]
+  chatMessages       ChatMessage[]
+  escrowTransactions EscrowTransaction[]
+
+  @@index([apmcId])
+  @@index([category])
+  @@index([startTime])
+  @@index([endTime])
+  @@index([status])
+}
+
+model SpotRegistration {
+  id        String   @id @default(cuid())
+  sessionId String
+  userId    String
+  role      String // FARMER or BUYER
+  status    String   @default("BOOKED") // BOOKED, CANCELLED
+  createdAt DateTime @default(now())
+
+  // Relations
+  session AuctionSession @relation(fields: [sessionId], references: [id])
+  user    User           @relation(fields: [userId], references: [id])
+
+  @@unique([sessionId, userId])
+  @@index([role])
+}
+
+model BookingRequest {
+  id         String    @id @default(cuid())
+  sessionId  String
+  userId     String
+  role       String // FARMER or BUYER
+  status     String    @default("PENDING") // PENDING, APPROVED, REJECTED
+  message    String?
+  productName String?
+  quantity    Int?
+  grade       String?
+  requestedDate DateTime @default(now())
+  reviewedBy String?
+  reviewedAt DateTime?
+  createdAt  DateTime  @default(now())
+  updatedAt  DateTime  @updatedAt
+
+  // Relations
+  session  AuctionSession @relation(fields: [sessionId], references: [id])
+  user     User           @relation(fields: [userId], references: [id])
+  reviewer User?          @relation("BookingReviewer", fields: [reviewedBy], references: [id])
+
+  @@unique([sessionId, userId])
+  @@index([status])
+  @@index([role])
+}
+
+model ChatMessage {
+  id        String   @id @default(cuid())
+  sessionId String
+  userId    String
+  message   String
+  type      String   @default("MESSAGE") // MESSAGE, BID, SYSTEM
+  data      String? // JSON for bid data
+  createdAt DateTime @default(now())
+
+  // Relations
+  session AuctionSession @relation(fields: [sessionId], references: [id])
+  user    User           @relation(fields: [userId], references: [id])
+
+  @@index([sessionId])
+  @@index([createdAt])
+}
+
+model EscrowTransaction {
+  id         String    @id @default(cuid())
+  bidId      String    @unique
+  amount     Float
+  status     String    @default("PENDING") // PENDING, ACCEPTED, REJECTED, RELEASED
+  farmerId   String
+  buyerId    String
+  sessionId  String
+  acceptedAt DateTime?
+  rejectedAt DateTime?
+  releasedAt DateTime?
+  createdAt  DateTime  @default(now())
+  updatedAt  DateTime  @updatedAt
+
+  // Relations
+  bid     Bid            @relation(fields: [bidId], references: [id])
+  farmer  User           @relation("EscrowFarmer", fields: [farmerId], references: [id])
+  buyer   User           @relation("EscrowBuyer", fields: [buyerId], references: [id])
+  session AuctionSession @relation(fields: [sessionId], references: [id])
+
+  @@index([status])
+  @@index([sessionId])
+}
+
+model Transaction {
+  id                String   @id @default(cuid())
+  userId            String
+  amount            Float
+  type              String // BID_PAYMENT, WALLET_TOPUP, REFUND, COMMISSION
+  status            String   @default("PENDING") // PENDING, COMPLETED, FAILED, CANCELLED
+  razorpayOrderId   String?  @unique
+  razorpayPaymentId String?
+  bidId             String?
+  description       String?
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  // Relations
+  user User @relation(fields: [userId], references: [id])
+  bid  Bid? @relation(fields: [bidId], references: [id])
+
+  @@index([userId])
+  @@index([type])
+  @@index([status])
+}
+
+model Order {
+  id                   String    @id @default(cuid())
+  buyerId              String
+  farmerId             String
+  produceId            String
+  bidId                String    @unique
+  quantity             Float
+  amount               Float
+  status               String    @default("CONFIRMED") // CONFIRMED, SHIPPED, DELIVERED, CANCELLED
+  deliveryAddress      String?
+  trackingNumber       String?
+  expectedDeliveryDate DateTime?
+  deliveredAt          DateTime?
+  createdAt            DateTime  @default(now())
+  updatedAt            DateTime  @updatedAt
+
+  // Relations
+  buyer   User     @relation("BuyerOrders", fields: [buyerId], references: [id])
+  farmer  User     @relation("FarmerOrders", fields: [farmerId], references: [id])
+  produce Produce  @relation(fields: [produceId], references: [id])
+  bid     Bid      @relation(fields: [bidId], references: [id])
+  reviews Review[]
+
+  @@index([buyerId])
+  @@index([farmerId])
+  @@index([produceId])
+  @@index([status])
+}
+
+model Review {
+  id         String   @id @default(cuid())
+  orderId    String
+  reviewerId String
+  revieweeId String
+  rating     Int
+  comment    String?
+  createdAt  DateTime @default(now())
+
+  // Relations
+  order    Order @relation(fields: [orderId], references: [id])
+  reviewer User  @relation("ReviewerReviews", fields: [reviewerId], references: [id])
+  reviewee User  @relation("RevieweeReviews", fields: [revieweeId], references: [id])
+
+  @@unique([orderId, reviewerId])
+}
+
+model Wallet {
+  id        String   @id @default(cuid())
+  userId    String   @unique
+  balance   Float    @default(0)
+  updatedAt DateTime @updatedAt
+
+  // Relations
+  user User @relation(fields: [userId], references: [id])
+}
+
+model DeviceToken {
+  id        String   @id @default(cuid())
+  userId    String
+  token     String   @unique
+  platform  String   @default("web")
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Relations
+  user User @relation(fields: [userId], references: [id])
+
+  @@index([userId])
+}
+
+model Notification {
+  id        String   @id @default(cuid())
+  userId    String
+  title     String
+  body      String
+  type      String   @default("GENERAL") // BID_UPDATE, AUCTION_START, AUCTION_END, PAYMENT, ORDER_UPDATE, GENERAL
+  data      String? // JSON string for additional data
+  isRead    Boolean  @default(false)
+  createdAt DateTime @default(now())
+
+  // Relations
+  user User @relation(fields: [userId], references: [id])
+
+  @@index([userId])
+  @@index([type])
+  @@index([isRead])
+}

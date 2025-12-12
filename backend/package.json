@@ -1,0 +1,47 @@
+{
+  "name": "farmer-bidding-backend",
+  "version": "1.0.0",
+  "description": "Backend API for farmer bidding platform",
+  "main": "src/server.js",
+  "scripts": {
+    "start": "node src/server.js",
+    "dev": "nodemon src/server.js",
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "db:generate": "prisma generate",
+    "db:push": "prisma db push",
+    "db:migrate": "prisma migrate dev",
+    "db:seed": "node prisma/seed.js",
+    "db:studio": "prisma studio"
+  },
+  "prisma": {
+    "seed": "node prisma/seed.js"
+  },
+  "dependencies": {
+    "@prisma/client": "^5.4.2",
+    "@vitejs/plugin-react": "^5.0.3",
+    "bcryptjs": "^2.4.3",
+    "cloudinary": "^1.40.0",
+    "cors": "^2.8.5",
+    "dotenv": "^16.6.1",
+    "express": "^4.21.2",
+    "express-rate-limit": "^6.10.0",
+    "firebase-admin": "^13.5.0",
+    "helmet": "^7.0.0",
+    "joi": "^17.9.2",
+    "jsonwebtoken": "^9.0.2",
+    "multer": "^1.4.5-lts.1",
+    "node-cron": "^3.0.2",
+    "razorpay": "^2.9.2",
+    "react": "^19.1.1",
+    "react-dom": "^19.1.1",
+    "socket.io": "^4.7.2",
+    "vite": "^7.1.7"
+  },
+  "devDependencies": {
+    "nodemon": "^3.0.1",
+    "prisma": "^5.4.2"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC"
+}
