@@ -25,7 +25,7 @@ AgroFarm is a real-time auction platform connecting Farmers directly with Buyers
 
 - **Frontend**: React.js (Vite), Tailwind CSS, Socket.io-client, Lucide React
 - **Backend**: Node.js, Express.js, Socket.io (Real-time), Cron Jobs (Automation)
-- **Database**: PostgreSQL, Prisma ORM
+- **Database**: NeonDB (Serverless PostgreSQL), Prisma ORM
 - **Authentication**: JWT (JSON Web Tokens)
 - **External Services**: Razorpay (Payments), Gemini/Custom ML Model (Price Prediction)
 
