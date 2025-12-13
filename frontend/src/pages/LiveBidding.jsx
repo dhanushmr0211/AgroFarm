@@ -1,13 +1,13 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useParams } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
-import axios from 'axios';
+import api from '../api';
 import { connectSocket, getSocket, disconnectSocket } from '../lib/socket';
-import { 
-  Clock, 
-  Users, 
-  TrendingUp, 
-  DollarSign, 
+import {
+  Clock,
+  Users,
+  TrendingUp,
+  DollarSign,
   Gavel,
   AlertCircle,
   CheckCircle
@@ -15,7 +15,7 @@ import {
 
 const LiveBidding = () => {
   const { sessionId } = useParams();
-  const { user, token } = useAuth();
+  const { user } = useAuth();
   const [session, setSession] = useState(null);
   const [currentBid, setCurrentBid] = useState(0);
   const [bidAmount, setBidAmount] = useState('');
@@ -29,7 +29,7 @@ const LiveBidding = () => {
 
   useEffect(() => {
     fetchSessionDetails();
-    
+
     const token = localStorage.getItem('token');
     const socket = connectSocket(() => token);
 
@@ -58,14 +58,14 @@ const LiveBidding = () => {
     socket.on('new_message', onNewMessage);
     socket.on('user_joined_session', onUserJoined);
     socket.on('user_left_session', onUserLeft);
-    
+
     return () => {
       try {
         const s = getSocket();
         if (s && s.connected) {
           s.emit('leave_session', { sessionId });
         }
-      } catch {}
+      } catch { }
       if (socket) {
         socket.off('connect', onConnect);
         socket.off('session_joined', onSessionJoined);
@@ -78,13 +78,11 @@ const LiveBidding = () => {
 
   const fetchSessionDetails = async () => {
     try {
-      const response = await axios.get(`/api/auctions/sessions/${sessionId}`, {
-        headers: { Authorization: `Bearer ${token}` }
-      });
-      
-      setSession(response.data);
-      setCurrentBid(response.data.startingPrice || 0);
-      calculateTimeRemaining(response.data);
+      const response = await api.get(`/auctions/sessions/${sessionId}`);
+
+      setSession(response);
+      setCurrentBid(response.startingPrice || 0);
+      calculateTimeRemaining(response);
     } catch (error) {
       console.error('Failed to fetch session details:', error);
     } finally {
@@ -94,13 +92,11 @@ const LiveBidding = () => {
 
   const fetchBidHistory = async () => {
     try {
-      const response = await axios.get(`/api/auctions/sessions/${sessionId}/bids`, {
-        headers: { Authorization: `Bearer ${token}` }
-      });
-      
-      setBidHistory(response.data);
-      if (response.data.length > 0) {
-        setCurrentBid(response.data[0].amount);
+      const response = await api.get(`/auctions/sessions/${sessionId}/bids`);
+
+      setBidHistory(response || []);
+      if (response && response.length > 0) {
+        setCurrentBid(response[0].amount);
       }
     } catch (error) {
       console.error('Failed to fetch bid history:', error);
@@ -109,11 +105,9 @@ const LiveBidding = () => {
 
   const fetchParticipants = async () => {
     try {
-      const response = await axios.get(`/api/auctions/sessions/${sessionId}/participants`, {
-        headers: { Authorization: `Bearer ${token}` }
-      });
-      
-      setParticipants(response.data);
+      const response = await api.get(`/auctions/sessions/${sessionId}/participants`);
+
+      setParticipants(response || []);
     } catch (error) {
       console.error('Failed to fetch participants:', error);
     }
@@ -123,7 +117,7 @@ const LiveBidding = () => {
     const now = new Date();
     const sessionStart = new Date(sessionData.dateTime);
     const sessionEnd = new Date(sessionStart.getTime() + (sessionData.duration * 60 * 1000));
-    
+
     if (now < sessionStart) {
       setTimeRemaining(Math.max(0, sessionStart - now));
     } else if (now <= sessionEnd) {
@@ -149,13 +143,11 @@ const LiveBidding = () => {
 
     try {
       setBidding(true);
-      await axios.post(`/api/auctions/sessions/${sessionId}/bid`, {
+      await api.post(`/auctions/sessions/${sessionId}/bid`, {
         amount: parseFloat(bidAmount),
         quantity: 1
-      }, {
-        headers: { Authorization: `Bearer ${token}` }
       });
-      
+
       setBidAmount('');
       setMessage('Bid submitted successfully!');
       fetchBidHistory();
@@ -269,9 +261,8 @@ const LiveBidding = () => {
                     </button>
                   </div>
                   {message && (
-                    <div className={`mt-4 p-3 rounded-lg ${
-                      message.includes('successfully') ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'
-                    }`}>
+                    <div className={`mt-4 p-3 rounded-lg ${message.includes('successfully') ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'
+                      }`}>
                       {message}
                     </div>
                   )}

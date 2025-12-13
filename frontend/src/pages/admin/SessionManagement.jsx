@@ -1,11 +1,11 @@
 import React, { useState, useEffect } from 'react';
-import { 
-  Calendar, 
-  MapPin, 
-  Users, 
-  Clock, 
-  Plus, 
-  X, 
+import {
+  Calendar,
+  MapPin,
+  Users,
+  Clock,
+  Plus,
+  X,
   Filter,
   CheckCircle,
   XCircle,
@@ -15,7 +15,7 @@ import {
   BarChart3,
   Trash2
 } from 'lucide-react';
-import axios from 'axios';
+import api from '../../api';
 import { toast } from 'react-hot-toast';
 import { Link } from 'react-router-dom';
 
@@ -27,7 +27,7 @@ const SessionManagement = () => {
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState('all');
   const [searchTerm, setSearchTerm] = useState('');
-  
+
   const [newSession, setNewSession] = useState({
     title: '',
     apmcId: '',
@@ -46,8 +46,8 @@ const SessionManagement = () => {
 
   const fetchSessions = async () => {
     try {
-      const response = await axios.get('/api/auctions/sessions');
-      setSessions(response.data);
+      const data = await api.get('/auctions/sessions');
+      setSessions(data);
     } catch (error) {
       console.error('Error fetching sessions:', error);
       toast.error('Failed to fetch sessions');
@@ -56,8 +56,8 @@ const SessionManagement = () => {
 
   const fetchApmcs = async () => {
     try {
-      const response = await axios.get('/api/auctions/apmcs');
-      setApmcs(response.data);
+      const data = await api.get('/auctions/apmcs');
+      setApmcs(data);
     } catch (error) {
       console.error('Error fetching APMCs:', error);
       toast.error('Failed to fetch APMCs');
@@ -66,8 +66,8 @@ const SessionManagement = () => {
 
   const fetchBookingRequests = async () => {
     try {
-      const response = await axios.get('/api/auctions/booking-requests');
-      setBookingRequests(response.data);
+      const data = await api.get('/auctions/booking-requests');
+      setBookingRequests(data);
       setLoading(false);
     } catch (error) {
       console.error('Error fetching booking requests:', error);
@@ -78,7 +78,7 @@ const SessionManagement = () => {
 
   const handleCreateSession = async (e) => {
     e.preventDefault();
-    
+
     if (!newSession.title || !newSession.apmcId || !newSession.date || !newSession.time) {
       toast.error('Please fill in all required fields');
       return;
@@ -87,12 +87,12 @@ const SessionManagement = () => {
     try {
       // Create datetime in local timezone instead of forcing UTC
       const localDateTime = new Date(`${newSession.date}T${newSession.time}:00`);
-      
+
       console.log('Creating session with:');
       console.log('Selected date/time:', `${newSession.date} ${newSession.time}`);
       console.log('Local DateTime object:', localDateTime);
       console.log('Sending ISO string:', localDateTime.toISOString());
-      
+
       const sessionData = {
         ...newSession,
         dateTime: localDateTime.toISOString(),
@@ -100,11 +100,12 @@ const SessionManagement = () => {
         duration: parseInt(newSession.duration)
       };
 
-      const response = await axios.post('/api/auctions/sessions', sessionData);
-      
-      if (response.data) {
+      const response = await api.post('/auctions/sessions', sessionData);
+
+      // api interceptor returns data directly, but we check if we have data/success
+      if (response) {
         toast.success('Auction session created successfully!');
-        setSessions([...sessions, response.data]);
+        setSessions([...sessions, response]); // assuming response is the new session object or contains it
         setShowCreateModal(false);
         setNewSession({
           title: '',
@@ -118,18 +119,19 @@ const SessionManagement = () => {
       }
     } catch (error) {
       console.error('Error creating session:', error);
-      toast.error(error.response?.data?.message || 'Failed to create session');
+      const msg = error.response?.data?.message || 'Failed to create session';
+      toast.error(msg);
     }
   };
 
   const handleBookingAction = async (requestId, action) => {
     try {
       const status = action === 'approve' ? 'APPROVED' : 'REJECTED';
-      
-      await axios.patch(`/api/auctions/booking-requests/${requestId}`, {
+
+      await api.patch(`/auctions/booking-requests/${requestId}`, {
         status: status
       });
-      
+
       toast.success(`Booking request ${action}d successfully`);
       fetchBookingRequests();
     } catch (error) {
@@ -143,14 +145,14 @@ const SessionManagement = () => {
     const session = sessions.find(s => s.id === sessionId);
     const action = session?.status === 'LIVE' ? 'end' : 'cancel';
     const actionText = session?.status === 'LIVE' ? 'end this session early' : 'cancel this session';
-    
+
     if (!window.confirm(`Are you sure you want to ${actionText}? This action cannot be undone.`)) {
       return;
     }
 
     try {
-      const response = await axios.patch(`/api/auctions/sessions/${sessionId}/dismiss`);
-      toast.success(response.data.message || `Session ${action}ed successfully`);
+      const response = await api.patch(`/auctions/sessions/${sessionId}/dismiss`);
+      toast.success(response.message || `Session ${action}ed successfully`);
       fetchSessions(); // Refresh the sessions list
     } catch (error) {
       console.error('Error dismissing session:', error);
@@ -164,8 +166,8 @@ const SessionManagement = () => {
     }
 
     try {
-      const response = await axios.delete('/api/auctions/admin/sessions/clear-non-live');
-      toast.success(response.data.message || 'Non-live sessions cleared successfully');
+      const response = await api.delete('/auctions/admin/sessions/clear-non-live');
+      toast.success(response.message || 'Non-live sessions cleared successfully');
       fetchSessions(); // Refresh the sessions list
     } catch (error) {
       console.error('Error clearing non-live sessions:', error);
@@ -179,8 +181,8 @@ const SessionManagement = () => {
     }
 
     try {
-      const response = await axios.delete('/api/auctions/admin/booking-requests/clear-processed');
-      toast.success(response.data.message || 'Processed booking requests cleared successfully');
+      const response = await api.delete('/auctions/admin/booking-requests/clear-processed');
+      toast.success(response.message || 'Processed booking requests cleared successfully');
       fetchBookingRequests(); // Refresh the booking requests list
     } catch (error) {
       console.error('Error clearing processed requests:', error);
@@ -190,15 +192,18 @@ const SessionManagement = () => {
 
   const filteredSessions = sessions.filter(session => {
     const matchesFilter = filter === 'all' || session.status === filter;
-    const matchesSearch = session.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                         session.apmc?.name.toLowerCase().includes(searchTerm.toLowerCase());
+    const sessionTitle = session.title || '';
+    const apmcName = session.apmc?.name || '';
+
+    const matchesSearch = sessionTitle.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      apmcName.toLowerCase().includes(searchTerm.toLowerCase());
     return matchesFilter && matchesSearch;
   });
 
   const filteredBookingRequests = bookingRequests.filter(request => {
     const matchesFilter = filter === 'all' || request.status === filter;
     const matchesSearch = request.farmer?.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                         request.apmc?.name.toLowerCase().includes(searchTerm.toLowerCase());
+      request.apmc?.name.toLowerCase().includes(searchTerm.toLowerCase());
     return matchesFilter && matchesSearch;
   });
 
@@ -252,7 +257,7 @@ const SessionManagement = () => {
             <option value="PENDING">Pending</option>
           </select>
         </div>
-        
+
         <div className="flex items-center space-x-2 flex-1 max-w-md">
           <Search className="w-5 h-5 text-gray-500" />
           <input
@@ -334,12 +339,11 @@ const SessionManagement = () => {
                     </div>
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap">
-                    <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${
-                      session.status === 'ACTIVE' ? 'bg-green-100 text-green-800' :
+                    <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${session.status === 'ACTIVE' ? 'bg-green-100 text-green-800' :
                       session.status === 'COMPLETED' ? 'bg-blue-100 text-blue-800' :
-                      session.status === 'CANCELLED' ? 'bg-red-100 text-red-800' :
-                      'bg-yellow-100 text-yellow-800'
-                    }`}>
+                        session.status === 'CANCELLED' ? 'bg-red-100 text-red-800' :
+                          'bg-yellow-100 text-yellow-800'
+                      }`}>
                       {session.status}
                     </span>
                   </td>
@@ -350,7 +354,7 @@ const SessionManagement = () => {
                         View
                       </button>
                       {(session.status === 'SCHEDULED' || session.status === 'LIVE') && (
-                        <button 
+                        <button
                           onClick={() => handleDismissSession(session.id)}
                           className="text-red-600 hover:text-red-900 flex items-center"
                           title={session.status === 'LIVE' ? 'End session early' : 'Cancel session'}
@@ -432,11 +436,10 @@ const SessionManagement = () => {
                     </span>
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap">
-                    <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${
-                      request.status === 'APPROVED' ? 'bg-green-100 text-green-800' :
+                    <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${request.status === 'APPROVED' ? 'bg-green-100 text-green-800' :
                       request.status === 'REJECTED' ? 'bg-red-100 text-red-800' :
-                      'bg-yellow-100 text-yellow-800'
-                    }`}>
+                        'bg-yellow-100 text-yellow-800'
+                      }`}>
                       {request.status}
                     </span>
                   </td>
@@ -492,7 +495,7 @@ const SessionManagement = () => {
                   <X className="w-6 h-6" />
                 </button>
               </div>
-              
+
               <form onSubmit={handleCreateSession} className="space-y-4">
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">
@@ -501,7 +504,7 @@ const SessionManagement = () => {
                   <input
                     type="text"
                     value={newSession.title}
-                    onChange={(e) => setNewSession({...newSession, title: e.target.value})}
+                    onChange={(e) => setNewSession({ ...newSession, title: e.target.value })}
                     className="w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-green-500"
                     placeholder="Enter session title"
                     required
@@ -514,7 +517,7 @@ const SessionManagement = () => {
                   </label>
                   <select
                     value={newSession.apmcId}
-                    onChange={(e) => setNewSession({...newSession, apmcId: e.target.value})}
+                    onChange={(e) => setNewSession({ ...newSession, apmcId: e.target.value })}
                     className="w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-green-500"
                     required
                   >
@@ -535,12 +538,12 @@ const SessionManagement = () => {
                     <input
                       type="date"
                       value={newSession.date}
-                      onChange={(e) => setNewSession({...newSession, date: e.target.value})}
+                      onChange={(e) => setNewSession({ ...newSession, date: e.target.value })}
                       className="w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-green-500"
                       required
                     />
                   </div>
-                  
+
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-1">
                       Time *
@@ -548,7 +551,7 @@ const SessionManagement = () => {
                     <input
                       type="time"
                       value={newSession.time}
-                      onChange={(e) => setNewSession({...newSession, time: e.target.value})}
+                      onChange={(e) => setNewSession({ ...newSession, time: e.target.value })}
                       className="w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-green-500"
                       required
                     />
@@ -563,13 +566,13 @@ const SessionManagement = () => {
                     <input
                       type="number"
                       value={newSession.duration}
-                      onChange={(e) => setNewSession({...newSession, duration: e.target.value})}
+                      onChange={(e) => setNewSession({ ...newSession, duration: e.target.value })}
                       className="w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-green-500"
                       min="30"
                       max="480"
                     />
                   </div>
-                  
+
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-1">
                       Max Participants
@@ -577,7 +580,7 @@ const SessionManagement = () => {
                     <input
                       type="number"
                       value={newSession.maxParticipants}
-                      onChange={(e) => setNewSession({...newSession, maxParticipants: e.target.value})}
+                      onChange={(e) => setNewSession({ ...newSession, maxParticipants: e.target.value })}
                       className="w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-green-500"
                       min="10"
                       max="200"
@@ -591,7 +594,7 @@ const SessionManagement = () => {
                   </label>
                   <textarea
                     value={newSession.description}
-                    onChange={(e) => setNewSession({...newSession, description: e.target.value})}
+                    onChange={(e) => setNewSession({ ...newSession, description: e.target.value })}
                     className="w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-green-500"
                     rows="3"
                     placeholder="Enter session description"

@@ -1,15 +1,15 @@
 import React, { useState, useEffect } from 'react';
-import { 
-  Users, 
-  UserCheck, 
-  UserX, 
+import {
+  Users,
+  UserCheck,
+  UserX,
   Calendar,
   PieChart,
   MapPin,
   TrendingUp,
   Activity
 } from 'lucide-react';
-import axios from 'axios';
+import api from '../../api';
 import { toast } from 'react-hot-toast';
 
 const UserStatistics = () => {
@@ -34,10 +34,10 @@ const UserStatistics = () => {
   const fetchStatistics = async () => {
     try {
       setLoading(true);
-      const response = await axios.get('/api/users/statistics');
-      
-      if (response.data.success) {
-        setStatistics(response.data.data);
+      const response = await api.get('/users/statistics');
+
+      if (response.success) {
+        setStatistics(response.data);
       }
     } catch (error) {
       console.error('Error fetching statistics:', error);
@@ -122,7 +122,7 @@ const UserStatistics = () => {
                 {statistics.usersByRole.FARMER}
               </span>
             </div>
-            
+
             <div className="flex items-center justify-between p-4 bg-blue-50 rounded-lg">
               <div className="flex items-center">
                 <div className="w-4 h-4 bg-blue-500 rounded-full mr-3"></div>
@@ -132,7 +132,7 @@ const UserStatistics = () => {
                 {statistics.usersByRole.BUYER}
               </span>
             </div>
-            
+
             <div className="flex items-center justify-between p-4 bg-purple-50 rounded-lg">
               <div className="flex items-center">
                 <div className="w-4 h-4 bg-purple-500 rounded-full mr-3"></div>
@@ -156,10 +156,10 @@ const UserStatistics = () => {
               statistics.usersByApmc.map((apmc, index) => (
                 <div key={apmc.apmcId} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
                   <div className="flex items-center">
-                    <div 
+                    <div
                       className="w-3 h-3 rounded-full mr-3"
-                      style={{ 
-                        backgroundColor: `hsl(${(index * 45) % 360}, 70%, 50%)` 
+                      style={{
+                        backgroundColor: `hsl(${(index * 45) % 360}, 70%, 50%)`
                       }}
                     ></div>
                     <span className="text-sm font-medium text-gray-700">
@@ -187,54 +187,54 @@ const UserStatistics = () => {
           <Activity className="w-6 h-6 mr-2" />
           User Activity Overview
         </h2>
-        
+
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
           <div className="text-center">
             <div className="text-3xl font-bold text-green-600 mb-2">
-              {statistics.totalUsers > 0 ? 
+              {statistics.totalUsers > 0 ?
                 Math.round((statistics.activeUsers / statistics.totalUsers) * 100) : 0}%
             </div>
             <div className="text-sm text-gray-600">Active Rate</div>
             <div className="w-full bg-gray-200 rounded-full h-2 mt-2">
-              <div 
-                className="bg-green-500 h-2 rounded-full" 
-                style={{ 
-                  width: statistics.totalUsers > 0 ? 
-                    `${(statistics.activeUsers / statistics.totalUsers) * 100}%` : '0%' 
+              <div
+                className="bg-green-500 h-2 rounded-full"
+                style={{
+                  width: statistics.totalUsers > 0 ?
+                    `${(statistics.activeUsers / statistics.totalUsers) * 100}%` : '0%'
                 }}
               ></div>
             </div>
           </div>
-          
+
           <div className="text-center">
             <div className="text-3xl font-bold text-blue-600 mb-2">
-              {statistics.totalUsers > 0 ? 
+              {statistics.totalUsers > 0 ?
                 Math.round((statistics.usersByRole.FARMER / statistics.totalUsers) * 100) : 0}%
             </div>
             <div className="text-sm text-gray-600">Farmers</div>
             <div className="w-full bg-gray-200 rounded-full h-2 mt-2">
-              <div 
-                className="bg-blue-500 h-2 rounded-full" 
-                style={{ 
-                  width: statistics.totalUsers > 0 ? 
-                    `${(statistics.usersByRole.FARMER / statistics.totalUsers) * 100}%` : '0%' 
+              <div
+                className="bg-blue-500 h-2 rounded-full"
+                style={{
+                  width: statistics.totalUsers > 0 ?
+                    `${(statistics.usersByRole.FARMER / statistics.totalUsers) * 100}%` : '0%'
                 }}
               ></div>
             </div>
           </div>
-          
+
           <div className="text-center">
             <div className="text-3xl font-bold text-purple-600 mb-2">
-              {statistics.totalUsers > 0 ? 
+              {statistics.totalUsers > 0 ?
                 Math.round((statistics.recentRegistrations / statistics.totalUsers) * 100) : 0}%
             </div>
             <div className="text-sm text-gray-600">Recent Growth</div>
             <div className="w-full bg-gray-200 rounded-full h-2 mt-2">
-              <div 
-                className="bg-purple-500 h-2 rounded-full" 
-                style={{ 
-                  width: statistics.totalUsers > 0 ? 
-                    `${(statistics.recentRegistrations / statistics.totalUsers) * 100}%` : '0%' 
+              <div
+                className="bg-purple-500 h-2 rounded-full"
+                style={{
+                  width: statistics.totalUsers > 0 ?
+                    `${(statistics.recentRegistrations / statistics.totalUsers) * 100}%` : '0%'
                 }}
               ></div>
             </div>

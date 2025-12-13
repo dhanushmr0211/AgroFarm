@@ -1,12 +1,14 @@
 import { useState, useEffect } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../../contexts/AuthContext'
-import { Plus, Package, DollarSign, Clock, TrendingUp, MapPin,X,Trash2, Star, Calendar, Users, Bell, CheckCircle, AlertCircle } from 'lucide-react'
-import axios from 'axios'
+import { Plus, Package, DollarSign, Clock, TrendingUp, MapPin, X, Trash2, Star, Calendar, Users, Bell, CheckCircle, AlertCircle } from 'lucide-react'
+import api from '../../api'
 import toast from 'react-hot-toast'
 
 
 const FarmerDashboard = () => {
   const { user } = useAuth()
+  const navigate = useNavigate()
   const [activeTab, setActiveTab] = useState('overview')
   const [showAddProduceModal, setShowAddProduceModal] = useState(false)
   const [newProduce, setNewProduce] = useState({
@@ -42,7 +44,7 @@ const FarmerDashboard = () => {
     fetchStats()
     fetchNotifications()
     fetchBookingRequests()
-    
+
     // Auto-refresh notifications every 30 seconds
     const interval = setInterval(() => {
       fetchNotifications()
@@ -54,8 +56,8 @@ const FarmerDashboard = () => {
 
   const fetchAPMCs = async () => {
     try {
-      const response = await axios.get('/api/auth/apmcs')
-      setApmcs(response.data.data || [])
+      const response = await api.get('/auth/apmcs')
+      setApmcs(response.data || [])
     } catch (error) {
       console.error('Failed to fetch APMCs:', error)
     }
@@ -63,8 +65,8 @@ const FarmerDashboard = () => {
 
   const fetchMyProduce = async () => {
     try {
-      const response = await axios.get('/api/auctions/farmer/auctions')
-      setMyProduce(response.data.data || [])
+      const response = await api.get('/auctions/farmer/auctions')
+      setMyProduce(response.data || [])
     } catch (error) {
       console.error('Failed to fetch produce:', error)
     }
@@ -72,19 +74,19 @@ const FarmerDashboard = () => {
 
   const fetchStats = async () => {
     try {
-      const response = await axios.get('/api/auctions/farmer/auctions')
-      const produce = response.data.data || []
-      
+      const response = await api.get('/auctions/farmer/auctions')
+      const produce = response.data || []
+
       const activeListings = produce.filter(p => p.status === 'UPCOMING' || p.status === 'LIVE').length
       const liveAuctions = produce.filter(p => p.status === 'LIVE').length
       const completedAuctions = produce.filter(p => p.status === 'COMPLETED')
       const successRate = produce.length ? Math.round((completedAuctions.length / produce.length) * 100) : 0
-      
+
       // Calculate real total earnings from completed auctions
       const totalEarnings = completedAuctions.reduce((sum, auction) => {
         return sum + (auction.winningBid?.amount || auction.currentBid || 0)
       }, 0)
-      
+
       setStats({
         activeListings,
         liveAuctions,
@@ -99,7 +101,7 @@ const FarmerDashboard = () => {
   const handleAddProduce = async (e) => {
     e.preventDefault()
     setLoading(true)
-    
+
     try {
       const produceData = {
         title: newProduce.name,
@@ -114,14 +116,9 @@ const FarmerDashboard = () => {
         auctionEndTime: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString() // 24 hours from now
       }
 
-      const response = await axios.post('/api/auctions', produceData, {
-        headers: {
-          'Authorization': `Bearer ${localStorage.getItem('token')}`,
-          'Content-Type': 'application/json'
-        }
-      })
-      
-      if (response.data.success) {
+      const response = await api.post('/auctions', produceData)
+
+      if (response.success) {
         toast.success('Produce listed successfully!')
         setShowAddProduceModal(false)
         setNewProduce({
@@ -147,7 +144,7 @@ const FarmerDashboard = () => {
   const getCategoryFromName = (name) => {
     const categoryMap = {
       'Tomato': 'VEGETABLES',
-      'Onion': 'VEGETABLES', 
+      'Onion': 'VEGETABLES',
       'Potato': 'VEGETABLES',
       'Wheat': 'GRAINS',
       'Rice': 'GRAINS',
@@ -161,14 +158,10 @@ const FarmerDashboard = () => {
   const fetchNotifications = async () => {
     setLoadingNotifications(true)
     try {
-      const response = await axios.get('/api/notifications', {
-        headers: {
-          'Authorization': `Bearer ${localStorage.getItem('token')}`
-        }
-      })
-      
-      if (response.data.success) {
-        const notificationsData = response.data.data
+      const response = await api.get('/notifications')
+
+      if (response.success) {
+        const notificationsData = response.data
         setNotifications(notificationsData.items || notificationsData || [])
         setUnreadCount(notificationsData.unreadCount || 0)
       }
@@ -183,14 +176,10 @@ const FarmerDashboard = () => {
   const fetchBookingRequests = async () => {
     setLoadingBookings(true)
     try {
-      const response = await axios.get('/api/auctions/farmer/booking-requests', {
-        headers: {
-          'Authorization': `Bearer ${localStorage.getItem('token')}`
-        }
-      })
-      
-      if (response.data.success) {
-        setBookingRequests(response.data.data || [])
+      const response = await api.get('/auctions/farmer/booking-requests')
+
+      if (response.success) {
+        setBookingRequests(response.data || [])
       }
     } catch (error) {
       console.error('Failed to fetch booking requests:', error)
@@ -202,11 +191,7 @@ const FarmerDashboard = () => {
 
   const clearAllBookingRequests = async () => {
     try {
-      await axios.delete('/api/auctions/farmer/booking-requests/clear-all', {
-        headers: {
-          'Authorization': `Bearer ${localStorage.getItem('token')}`
-        }
-      })
+      await api.delete('/auctions/farmer/booking-requests/clear-all')
       toast.success('All requests cleared')
       fetchBookingRequests()
     } catch (error) {
@@ -217,11 +202,7 @@ const FarmerDashboard = () => {
 
   const deleteBookingRequest = async (id) => {
     try {
-      await axios.delete(`/api/auctions/farmer/booking-requests/${id}`, {
-        headers: {
-          'Authorization': `Bearer ${localStorage.getItem('token')}`
-        }
-      })
+      await api.delete(`/auctions/farmer/booking-requests/${id}`)
       toast.success('Request deleted')
       setBookingRequests(prev => prev.filter(b => b.id !== id))
     } catch (error) {
@@ -233,14 +214,10 @@ const FarmerDashboard = () => {
   // Mark notification as read
   const markNotificationAsRead = async (notificationId) => {
     try {
-      await axios.put(`/api/notifications/${notificationId}/read`, {}, {
-        headers: {
-          'Authorization': `Bearer ${localStorage.getItem('token')}`
-        }
-      })
-      
+      await api.put(`/notifications/${notificationId}/read`, {})
+
       // Update local state
-      setNotifications(prev => prev.map(notif => 
+      setNotifications(prev => prev.map(notif =>
         notif.id === notificationId ? { ...notif, isRead: true } : notif
       ))
       setUnreadCount(prev => Math.max(0, prev - 1))
@@ -252,12 +229,8 @@ const FarmerDashboard = () => {
   // Mark all notifications as read
   const markAllNotificationsAsRead = async () => {
     try {
-      await axios.put('/api/notifications/mark-all-read', {}, {
-        headers: {
-          'Authorization': `Bearer ${localStorage.getItem('token')}`
-        }
-      })
-      
+      await api.put('/notifications/mark-all-read', {})
+
       // Update local state
       setNotifications(prev => prev.map(notif => ({ ...notif, isRead: true })))
       setUnreadCount(0)
@@ -289,7 +262,7 @@ const FarmerDashboard = () => {
     const date = new Date(dateString)
     const now = new Date()
     const diffInMinutes = Math.floor((now - date) / (1000 * 60))
-    
+
     if (diffInMinutes < 1) return 'Just now'
     if (diffInMinutes < 60) return `${diffInMinutes}m ago`
     if (diffInMinutes < 1440) return `${Math.floor(diffInMinutes / 60)}h ago`
@@ -310,16 +283,15 @@ const FarmerDashboard = () => {
                 Manage your produce and track your auctions
               </p>
             </div>
-            
+
             {/* Notifications Bell */}
             <div className="relative">
               <button
                 onClick={() => setActiveTab('notifications')}
-                className={`p-2 rounded-full ${
-                  activeTab === 'notifications' 
-                    ? 'bg-green-100 text-green-600' 
-                    : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
-                } transition-colors`}
+                className={`p-2 rounded-full ${activeTab === 'notifications'
+                  ? 'bg-green-100 text-green-600'
+                  : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                  } transition-colors`}
               >
                 <Bell className="h-6 w-6" />
                 {unreadCount > 0 && (
@@ -381,51 +353,46 @@ const FarmerDashboard = () => {
             <nav className="-mb-px flex">
               <button
                 onClick={() => setActiveTab('overview')}
-                className={`py-4 px-6 text-sm font-medium border-b-2 ${
-                  activeTab === 'overview'
-                    ? 'border-green-500 text-green-600'
-                    : 'border-transparent text-gray-500 hover:text-gray-700'
-                }`}
+                className={`py-4 px-6 text-sm font-medium border-b-2 ${activeTab === 'overview'
+                  ? 'border-green-500 text-green-600'
+                  : 'border-transparent text-gray-500 hover:text-gray-700'
+                  }`}
               >
                 Overview
               </button>
               <button
                 onClick={() => setActiveTab('produce')}
-                className={`py-4 px-6 text-sm font-medium border-b-2 ${
-                  activeTab === 'produce'
-                    ? 'border-green-500 text-green-600'
-                    : 'border-transparent text-gray-500 hover:text-gray-700'
-                }`}
+                className={`py-4 px-6 text-sm font-medium border-b-2 ${activeTab === 'produce'
+                  ? 'border-green-500 text-green-600'
+                  : 'border-transparent text-gray-500 hover:text-gray-700'
+                  }`}
               >
                 My Produce
               </button>
               <button
                 onClick={() => setActiveTab('auctions')}
-                className={`py-4 px-6 text-sm font-medium border-b-2 ${
-                  activeTab === 'auctions'
-                    ? 'border-green-500 text-green-600'
-                    : 'border-transparent text-gray-500 hover:text-gray-700'
-                }`}
+                className={`py-4 px-6 text-sm font-medium border-b-2 ${activeTab === 'auctions'
+                  ? 'border-green-500 text-green-600'
+                  : 'border-transparent text-gray-500 hover:text-gray-700'
+                  }`}
               >
                 Live Auctions
               </button>
               <button
                 onClick={() => setActiveTab('history')}
-                className={`py-4 px-6 text-sm font-medium border-b-2 ${
-                  activeTab === 'history'
-                    ? 'border-green-500 text-green-600'
-                    : 'border-transparent text-gray-500 hover:text-gray-700'
-                }`}
+                className={`py-4 px-6 text-sm font-medium border-b-2 ${activeTab === 'history'
+                  ? 'border-green-500 text-green-600'
+                  : 'border-transparent text-gray-500 hover:text-gray-700'
+                  }`}
               >
                 History
               </button>
               <button
                 onClick={() => setActiveTab('notifications')}
-                className={`py-4 px-6 text-sm font-medium border-b-2 relative ${
-                  activeTab === 'notifications'
-                    ? 'border-green-500 text-green-600'
-                    : 'border-transparent text-gray-500 hover:text-gray-700'
-                }`}
+                className={`py-4 px-6 text-sm font-medium border-b-2 relative ${activeTab === 'notifications'
+                  ? 'border-green-500 text-green-600'
+                  : 'border-transparent text-gray-500 hover:text-gray-700'
+                  }`}
               >
                 Notifications
                 {unreadCount > 0 && (
@@ -436,11 +403,10 @@ const FarmerDashboard = () => {
               </button>
               <button
                 onClick={() => setActiveTab('bookings')}
-                className={`py-4 px-6 text-sm font-medium border-b-2 ${
-                  activeTab === 'bookings'
-                    ? 'border-green-500 text-green-600'
-                    : 'border-transparent text-gray-500 hover:text-gray-700'
-                }`}
+                className={`py-4 px-6 text-sm font-medium border-b-2 ${activeTab === 'bookings'
+                  ? 'border-green-500 text-green-600'
+                  : 'border-transparent text-gray-500 hover:text-gray-700'
+                  }`}
               >
                 Booking Status
               </button>
@@ -452,7 +418,7 @@ const FarmerDashboard = () => {
               <div>
                 <div className="flex justify-between items-center mb-6">
                   <h2 className="text-xl font-semibold text-gray-900">Recent Activity</h2>
-                  <button 
+                  <button
                     onClick={() => setShowAddProduceModal(true)}
                     className="bg-green-600 text-white px-4 py-2 rounded-md hover:bg-green-700 flex items-center disabled:opacity-50"
                     disabled={loading}
@@ -462,51 +428,77 @@ const FarmerDashboard = () => {
                   </button>
                 </div>
 
+                {/* Quick Actions Card */}
+                <div className="mb-8 grid grid-cols-1 md:grid-cols-2 gap-6">
+                  <div className="bg-blue-50 border border-blue-100 rounded-lg p-6 flex items-center justify-between">
+                    <div>
+                      <h3 className="text-lg font-semibold text-blue-900">Find Auction Sessions</h3>
+                      <p className="text-blue-700 text-sm mt-1">Browse upcoming sessions at APMCs and book your spot.</p>
+                    </div>
+                    <button
+                      onClick={() => navigate('/apmc-schedule')}
+                      className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition-colors flex items-center"
+                    >
+                      <Calendar className="w-4 h-4 mr-2" />
+                      View Schedule
+                    </button>
+                  </div>
+
+                  <div className="bg-purple-50 border border-purple-100 rounded-lg p-6 flex items-center justify-between">
+                    <div>
+                      <h3 className="text-lg font-semibold text-purple-900">AI Price Prediction</h3>
+                      <p className="text-purple-700 text-sm mt-1">Get AI-powered insights on produce prices.</p>
+                    </div>
+                    <a
+                      href="http://10.81.203.121:8501"
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="bg-purple-600 text-white px-4 py-2 rounded-lg hover:bg-purple-700 transition-colors flex items-center"
+                    >
+                      <TrendingUp className="w-4 h-4 mr-2" />
+                      Predict Price
+                    </a>
+                  </div>
+                </div>
+
                 <div className="space-y-4">
-                  <div className="flex items-center justify-between p-4 bg-gray-50 rounded-lg">
-                    <div className="flex items-center">
-                      <div className="w-12 h-12 bg-green-100 rounded-lg flex items-center justify-center">
-                        <Package className="w-6 h-6 text-green-600" />
-                      </div>
-                      <div className="ml-4">
-                        <p className="font-medium text-gray-900">Premium Basmati Rice</p>
-                        <p className="text-sm text-gray-600">Auction ended • Winning bid: ₹5,200/quintal</p>
-                      </div>
+                  {myProduce.length === 0 ? (
+                    <div className="text-center py-8 bg-white rounded-lg border border-gray-100">
+                      <p className="text-gray-500">No recent activity</p>
                     </div>
-                    <span className="bg-green-100 text-green-800 text-xs font-medium px-2.5 py-0.5 rounded-full">
-                      Sold
-                    </span>
-                  </div>
-
-                  <div className="flex items-center justify-between p-4 bg-gray-50 rounded-lg">
-                    <div className="flex items-center">
-                      <div className="w-12 h-12 bg-blue-100 rounded-lg flex items-center justify-center">
-                        <Clock className="w-6 h-6 text-blue-600" />
+                  ) : (
+                    myProduce.slice(0, 3).map((produce) => (
+                      <div key={produce.id} className="flex items-center justify-between p-4 bg-white border border-gray-100 rounded-lg shadow-sm">
+                        <div className="flex items-center">
+                          <div className={`w-12 h-12 rounded-lg flex items-center justify-center ${produce.status === 'LIVE' ? 'bg-blue-100' :
+                            produce.status === 'COMPLETED' ? 'bg-green-100' : 'bg-yellow-100'
+                            }`}>
+                            {produce.status === 'LIVE' ? (
+                              <Clock className="w-6 h-6 text-blue-600" />
+                            ) : produce.status === 'COMPLETED' ? (
+                              <Package className="w-6 h-6 text-green-600" />
+                            ) : (
+                              <Package className="w-6 h-6 text-yellow-600" />
+                            )}
+                          </div>
+                          <div className="ml-4">
+                            <p className="font-medium text-gray-900">{produce.title}</p>
+                            <p className="text-sm text-gray-600">
+                              {produce.status === 'LIVE' ? `Live auction • Current Price: ₹${produce.currentBid || produce.basePrice}` :
+                                produce.status === 'COMPLETED' ? `Auction ended • Winning bid: ₹${produce.winningBid?.amount || produce.currentBid}` :
+                                  `Upcoming • Base price: ₹${produce.basePrice}`}
+                            </p>
+                          </div>
+                        </div>
+                        <span className={`text-xs font-medium px-2.5 py-0.5 rounded-full ${produce.status === 'LIVE' ? 'bg-blue-100 text-blue-800' :
+                          produce.status === 'COMPLETED' ? 'bg-green-100 text-green-800' :
+                            'bg-yellow-100 text-yellow-800'
+                          }`}>
+                          {produce.status}
+                        </span>
                       </div>
-                      <div className="ml-4">
-                        <p className="font-medium text-gray-900">Organic Wheat</p>
-                        <p className="text-sm text-gray-600">Live auction • Current bid: ₹2,800/quintal</p>
-                      </div>
-                    </div>
-                    <span className="bg-blue-100 text-blue-800 text-xs font-medium px-2.5 py-0.5 rounded-full pulse-green">
-                      Live
-                    </span>
-                  </div>
-
-                  <div className="flex items-center justify-between p-4 bg-gray-50 rounded-lg">
-                    <div className="flex items-center">
-                      <div className="w-12 h-12 bg-yellow-100 rounded-lg flex items-center justify-center">
-                        <Package className="w-6 h-6 text-yellow-600" />
-                      </div>
-                      <div className="ml-4">
-                        <p className="font-medium text-gray-900">Fresh Tomatoes</p>
-                        <p className="text-sm text-gray-600">Pending approval • Base price: ₹1,500/quintal</p>
-                      </div>
-                    </div>
-                    <span className="bg-yellow-100 text-yellow-800 text-xs font-medium px-2.5 py-0.5 rounded-full">
-                      Pending
-                    </span>
-                  </div>
+                    ))
+                  )}
                 </div>
               </div>
             )}
@@ -515,7 +507,7 @@ const FarmerDashboard = () => {
               <div>
                 <div className="flex justify-between items-center mb-6">
                   <h2 className="text-xl font-semibold text-gray-900">My Produce</h2>
-                  <button 
+                  <button
                     onClick={() => setShowAddProduceModal(true)}
                     className="bg-green-600 text-white px-4 py-2 rounded-md hover:bg-green-700 flex items-center"
                   >
@@ -525,59 +517,58 @@ const FarmerDashboard = () => {
                 </div>
 
                 {/* Real Produce Listings from API */}
-                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                          {myProduce.length === 0 ? (
-                          <div className="col-span-full text-center py-12 text-gray-500">
-                            <Package className="w-16 h-16 mx-auto mb-4 text-gray-400" />
-                            <h3 className="text-lg font-medium text-gray-900 mb-2">No produce listed yet</h3>
-                            <p className="text-gray-600 mb-4">Start by adding your first produce for auction</p>
-                            <button 
-                            onClick={() => setShowAddProduceModal(true)}
-                            className="bg-green-600 text-white px-4 py-2 rounded-md hover:bg-green-700"
-                            >
-                            Add Your First Produce
-                            </button>
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                  {myProduce.length === 0 ? (
+                    <div className="col-span-full text-center py-12 text-gray-500">
+                      <Package className="w-16 h-16 mx-auto mb-4 text-gray-400" />
+                      <h3 className="text-lg font-medium text-gray-900 mb-2">No produce listed yet</h3>
+                      <p className="text-gray-600 mb-4">Start by adding your first produce for auction</p>
+                      <button
+                        onClick={() => setShowAddProduceModal(true)}
+                        className="bg-green-600 text-white px-4 py-2 rounded-md hover:bg-green-700"
+                      >
+                        Add Your First Produce
+                      </button>
+                    </div>
+                  ) : (
+                    myProduce.map((produce) => (
+                      <div key={produce.id} className="bg-white border border-gray-200 rounded-lg p-6 shadow-sm hover:shadow-md transition-shadow">
+                        <div className="flex justify-between items-start mb-4">
+                          <h3 className="text-lg font-semibold text-gray-900">{produce.title}</h3>
+                          <span className={`text-xs font-medium px-2.5 py-0.5 rounded-full ${produce.status === 'LIVE'
+                            ? 'bg-blue-100 text-blue-800'
+                            : produce.status === 'UPCOMING'
+                              ? 'bg-yellow-100 text-yellow-800'
+                              : produce.status === 'COMPLETED'
+                                ? 'bg-green-100 text-green-800'
+                                : 'bg-gray-100 text-gray-800'
+                            }`}>
+                            {produce.status}
+                          </span>
+                        </div>
+                        <div className="space-y-2 text-sm text-gray-600">
+                          <div className="flex justify-between">
+                            <span>Quantity:</span>
+                            <span className="font-medium">{produce.quantity} {produce.unit}</span>
                           </div>
-                          ) : (
-                          myProduce.map((produce) => (
-                            <div key={produce.id} className="bg-white border border-gray-200 rounded-lg p-6 shadow-sm">
-                            <div className="flex justify-between items-start mb-4">
-                              <h3 className="text-lg font-semibold text-gray-900">{produce.title}</h3>
-                              <span className={`text-xs font-medium px-2.5 py-0.5 rounded-full ${
-                              produce.status === 'LIVE' 
-                                ? 'bg-green-100 text-green-800' 
-                                : produce.status === 'UPCOMING'
-                                ? 'bg-blue-100 text-blue-800'
-                                : produce.status === 'COMPLETED'
-                                ? 'bg-gray-100 text-gray-800'
-                                : 'bg-yellow-100 text-yellow-800'
-                              }`}>
-                              {produce.status}
-                              </span>
-                            </div>
-                            <div className="space-y-2 text-sm text-gray-600">
-                              <div className="flex justify-between">
-                              <span>Quantity:</span>
-                              <span className="font-medium">{produce.quantity} {produce.unit}</span>
-                              </div>
-                              <div className="flex justify-between">
-                              <span>Quality:</span>
-                              <span className="font-medium">{produce.grade}</span>
-                              </div>
-                              <div className="flex justify-between">
-                              <span>Base Price:</span>
-                              <span className="font-medium text-green-600">₹{produce.basePrice?.toLocaleString()}</span>
-                              </div>
-                              <div className="flex items-center">
-                              <MapPin size={14} className="mr-1" />
-                              <span>{produce.pickupLocation}</span>
-                              </div>
-                              <div className="flex items-center">
-                              <Calendar size={14} className="mr-1" />
-                              <span>{new Date(produce.auctionStartTime).toLocaleString()}</span>
-                              </div>
-                            </div>
-                            {produce.currentBid && (
+                          <div className="flex justify-between">
+                            <span>Quality:</span>
+                            <span className="font-medium">{produce.grade}</span>
+                          </div>
+                          <div className="flex justify-between">
+                            <span>Base Price:</span>
+                            <span className="font-medium text-green-600">₹{produce.basePrice?.toLocaleString()}</span>
+                          </div>
+                          <div className="flex items-center">
+                            <MapPin size={14} className="mr-1" />
+                            <span>{produce.pickupLocation}</span>
+                          </div>
+                          <div className="flex items-center">
+                            <Calendar size={14} className="mr-1" />
+                            <span>{new Date(produce.auctionStartTime).toLocaleString()}</span>
+                          </div>
+                        </div>
+                        {produce.currentBid && (
                           <div className="mt-4 pt-4 border-t border-gray-100">
                             <div className="flex justify-between text-sm">
                               <span className="text-gray-600">Current Bid:</span>
@@ -585,9 +576,18 @@ const FarmerDashboard = () => {
                             </div>
                           </div>
                         )}
+                        {/* Action buttons */}
+                        <div className="mt-4 pt-4 border-t border-gray-100 flex justify-end">
+                          <button
+                            onClick={() => navigate(`/produce/${produce.id}`)}
+                            className="text-sm text-green-600 hover:text-green-800 font-medium"
+                          >
+                            View Details →
+                          </button>
+                        </div>
                       </div>
                     ))
-                  ) }
+                  )}
                 </div>
               </div>
             )}
@@ -595,11 +595,58 @@ const FarmerDashboard = () => {
             {activeTab === 'auctions' && (
               <div>
                 <h2 className="text-xl font-semibold text-gray-900 mb-6">Live Auctions</h2>
-                <div className="text-center py-12 text-gray-500">
-                  <Clock className="w-16 h-16 mx-auto mb-4 text-gray-400" />
-                  <h3 className="text-lg font-medium text-gray-900 mb-2">No live auctions</h3>
-                  <p className="text-gray-600">Your produce auctions will appear here when they go live</p>
-                </div>
+                {myProduce.filter(p => p.status === 'LIVE').length === 0 ? (
+                  <div className="text-center py-12 text-gray-500">
+                    <Clock className="w-16 h-16 mx-auto mb-4 text-gray-400" />
+                    <h3 className="text-lg font-medium text-gray-900 mb-2">No live auctions</h3>
+                    <p className="text-gray-600">Your live produce auctions will appear here.</p>
+                    <button
+                      onClick={() => navigate('/apmc-schedule')}
+                      className="mt-4 text-green-600 hover:text-green-800 font-medium"
+                    >
+                      Looking for sessions? Check Schedule →
+                    </button>
+                  </div>
+                ) : (
+                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                    {myProduce.filter(p => p.status === 'LIVE').map((produce) => (
+                      <div key={produce.id} className="bg-white border-2 border-green-500 rounded-lg p-6 shadow-md relative overflow-hidden">
+                        <div className="absolute top-0 right-0 bg-green-500 text-white text-xs font-bold px-2 py-1 rounded-bl">
+                          LIVE NOW
+                        </div>
+                        <div className="flex justify-between items-start mb-4">
+                          <h3 className="text-lg font-semibold text-gray-900">{produce.title}</h3>
+                        </div>
+                        <div className="space-y-2 text-sm text-gray-600">
+                          <div className="flex justify-between">
+                            <span>Current High Bid:</span>
+                            <span className="font-bold text-xl text-green-600">₹{produce.currentBid?.toLocaleString() || produce.basePrice?.toLocaleString()}</span>
+                          </div>
+                          <div className="flex justify-between">
+                            <span>Quantity:</span>
+                            <span className="font-medium">{produce.quantity} {produce.unit}</span>
+                          </div>
+                          <div className="mt-4 flex space-x-3">
+                            <button
+                              onClick={() => navigate(`/produce/${produce.id}`)}
+                              className="flex-1 bg-green-600 text-white py-2 rounded hover:bg-green-700 transition text-sm font-medium"
+                            >
+                              Monitor Auction
+                            </button>
+                            {produce.sessionId && (
+                              <button
+                                onClick={() => navigate(`/session/${produce.sessionId}`)}
+                                className="flex-1 bg-blue-600 text-white py-2 rounded hover:bg-blue-700 transition text-sm font-medium"
+                              >
+                                Join Session
+                              </button>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
             )}
 
@@ -644,11 +691,10 @@ const FarmerDashboard = () => {
                     {notifications.map((notification) => (
                       <div
                         key={notification.id}
-                        className={`p-4 border rounded-lg cursor-pointer transition-colors ${
-                          notification.isRead 
-                            ? 'bg-white border-gray-200' 
-                            : 'bg-blue-50 border-blue-200'
-                        }`}
+                        className={`p-4 border rounded-lg cursor-pointer transition-colors ${notification.isRead
+                          ? 'bg-white border-gray-200'
+                          : 'bg-blue-50 border-blue-200'
+                          }`}
                         onClick={() => !notification.isRead && markNotificationAsRead(notification.id)}
                       >
                         <div className="flex items-start space-x-3">
@@ -657,18 +703,16 @@ const FarmerDashboard = () => {
                           </div>
                           <div className="flex-1 min-w-0">
                             <div className="flex justify-between items-start">
-                              <h4 className={`text-sm font-medium ${
-                                notification.isRead ? 'text-gray-900' : 'text-blue-900'
-                              }`}>
+                              <h4 className={`text-sm font-medium ${notification.isRead ? 'text-gray-900' : 'text-blue-900'
+                                }`}>
                                 {notification.title}
                               </h4>
                               <span className="text-xs text-gray-500 ml-2 flex-shrink-0">
                                 {formatNotificationTime(notification.createdAt)}
                               </span>
                             </div>
-                            <p className={`text-sm mt-1 ${
-                              notification.isRead ? 'text-gray-600' : 'text-blue-800'
-                            }`}>
+                            <p className={`text-sm mt-1 ${notification.isRead ? 'text-gray-600' : 'text-blue-800'
+                              }`}>
                               {notification.body}
                             </p>
                             {!notification.isRead && (
@@ -731,13 +775,12 @@ const FarmerDashboard = () => {
                               📍 {booking.apmc?.location || 'Location not available'}
                             </p>
                           </div>
-                          <span className={`px-3 py-1 rounded-full text-sm font-medium ${
-                            booking.status === 'APPROVED' 
-                              ? 'bg-green-100 text-green-800' 
-                              : booking.status === 'REJECTED'
+                          <span className={`px-3 py-1 rounded-full text-sm font-medium ${booking.status === 'APPROVED'
+                            ? 'bg-green-100 text-green-800'
+                            : booking.status === 'REJECTED'
                               ? 'bg-red-100 text-red-800'
                               : 'bg-yellow-100 text-yellow-800'
-                          }`}>
+                            }`}>
                             {booking.status}
                           </span>
                           <button
@@ -748,7 +791,7 @@ const FarmerDashboard = () => {
                             Delete
                           </button>
                         </div>
-                        
+
                         <div className="grid grid-cols-2 gap-4 text-sm">
                           <div>
                             <span className="text-gray-600">Request Date:</span>
@@ -811,13 +854,13 @@ const FarmerDashboard = () => {
                   ✕
                 </button>
               </div>
-              
+
               <form onSubmit={handleAddProduce} className="space-y-4">
                 <div>
                   <label className="block text-sm font-medium text-gray-700">Produce Name</label>
                   <select
                     value={newProduce.name}
-                    onChange={(e) => setNewProduce({...newProduce, name: e.target.value})}
+                    onChange={(e) => setNewProduce({ ...newProduce, name: e.target.value })}
                     className="mt-1 block w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-green-500"
                     required
                   >
@@ -838,7 +881,7 @@ const FarmerDashboard = () => {
                     <input
                       type="number"
                       value={newProduce.quantity}
-                      onChange={(e) => setNewProduce({...newProduce, quantity: e.target.value})}
+                      onChange={(e) => setNewProduce({ ...newProduce, quantity: e.target.value })}
                       className="mt-1 block w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-green-500"
                       placeholder="500"
                       required
@@ -848,7 +891,7 @@ const FarmerDashboard = () => {
                     <label className="block text-sm font-medium text-gray-700">Quality</label>
                     <select
                       value={newProduce.quality}
-                      onChange={(e) => setNewProduce({...newProduce, quality: e.target.value})}
+                      onChange={(e) => setNewProduce({ ...newProduce, quality: e.target.value })}
                       className="mt-1 block w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-green-500"
                     >
                       <option value="Grade A+">Grade A+</option>
@@ -863,7 +906,7 @@ const FarmerDashboard = () => {
                   <input
                     type="number"
                     value={newProduce.minPrice}
-                    onChange={(e) => setNewProduce({...newProduce, minPrice: e.target.value})}
+                    onChange={(e) => setNewProduce({ ...newProduce, minPrice: e.target.value })}
                     className="mt-1 block w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-green-500"
                     placeholder="2500"
                     required
@@ -874,7 +917,7 @@ const FarmerDashboard = () => {
                   <label className="block text-sm font-medium text-gray-700">Select APMC</label>
                   <select
                     value={newProduce.apmcId}
-                    onChange={(e) => setNewProduce({...newProduce, apmcId: e.target.value})}
+                    onChange={(e) => setNewProduce({ ...newProduce, apmcId: e.target.value })}
                     className="mt-1 block w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-green-500"
                     required
                   >
@@ -892,7 +935,7 @@ const FarmerDashboard = () => {
                   <input
                     type="text"
                     value={newProduce.location}
-                    onChange={(e) => setNewProduce({...newProduce, location: e.target.value})}
+                    onChange={(e) => setNewProduce({ ...newProduce, location: e.target.value })}
                     className="mt-1 block w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-green-500"
                     placeholder="Farm location"
                     required
@@ -903,7 +946,7 @@ const FarmerDashboard = () => {
                   <label className="block text-sm font-medium text-gray-700">Description</label>
                   <textarea
                     value={newProduce.description}
-                    onChange={(e) => setNewProduce({...newProduce, description: e.target.value})}
+                    onChange={(e) => setNewProduce({ ...newProduce, description: e.target.value })}
                     className="mt-1 block w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-green-500"
                     rows={3}
                     placeholder="Additional details about your produce..."

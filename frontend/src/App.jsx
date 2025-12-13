@@ -36,51 +36,51 @@ function App() {
     <QueryClientProvider client={queryClient}>
       <AuthProvider>
         <Router>
-          <div className="min-h-screen bg-gray-50">
+          <div className="min-h-screen bg-gray-50 pt-24">
             <Navbar />
             <main>
               <Routes>
                 <Route path="/" element={<Home />} />
                 <Route path="/login" element={<Login />} />
                 <Route path="/register" element={<Register />} />
-                
+
                 {/* Protected Routes */}
                 <Route path="/farmer/dashboard" element={
                   <ProtectedRoute allowedRoles={['FARMER']}>
                     <FarmerDashboard />
                   </ProtectedRoute>
                 } />
-                
+
                 <Route path="/buyer/dashboard" element={
                   <ProtectedRoute allowedRoles={['BUYER']}>
                     <BuyerDashboard />
                   </ProtectedRoute>
                 } />
-                
+
                 <Route path="/auction/:produceId" element={
                   <ProtectedRoute allowedRoles={['BUYER', 'FARMER']}>
                     <LiveAuction />
                   </ProtectedRoute>
                 } />
-                
+
                 <Route path="/produce/:id" element={
                   <ProtectedRoute allowedRoles={['BUYER', 'FARMER']}>
                     <ProduceDetails />
                   </ProtectedRoute>
                 } />
-                
+
                 <Route path="/profile" element={
                   <ProtectedRoute>
                     <Profile />
                   </ProtectedRoute>
                 } />
-                
+
                 <Route path="/apmc-schedule" element={
                   <ProtectedRoute allowedRoles={['BUYER', 'FARMER']}>
                     <APMCBiddingSchedule />
                   </ProtectedRoute>
                 } />
-                
+
                 <Route path="/bid-history/:apmcId" element={
                   <ProtectedRoute allowedRoles={['BUYER', 'FARMER']}>
                     <BidHistory />
@@ -115,8 +115,8 @@ function App() {
 
               </Routes>
             </main>
-            
-            <Toaster 
+
+            <Toaster
               position="top-right"
               toastOptions={{
                 duration: 4000,

@@ -1,12 +1,12 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useParams } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
-import axios from 'axios';
-import { 
-  Clock, 
-  Users, 
-  TrendingUp, 
-  DollarSign, 
+import api from '../api';
+import {
+  Clock,
+  Users,
+  TrendingUp,
+  DollarSign,
   Gavel,
   AlertCircle,
   CheckCircle
@@ -14,7 +14,7 @@ import {
 
 const LiveBidding = () => {
   const { sessionId } = useParams();
-  const { user, token } = useAuth();
+  const { user } = useAuth();
   const [session, setSession] = useState(null);
   const [currentBid, setCurrentBid] = useState(0);
   const [bidAmount, setBidAmount] = useState('');
@@ -29,7 +29,7 @@ const LiveBidding = () => {
   useEffect(() => {
     fetchSessionDetails();
     startRealTimeUpdates();
-    
+
     return () => {
       if (intervalRef.current) {
         clearInterval(intervalRef.current);
@@ -39,13 +39,11 @@ const LiveBidding = () => {
 
   const fetchSessionDetails = async () => {
     try {
-      const response = await axios.get(`/api/auctions/sessions/${sessionId}`, {
-        headers: { Authorization: `Bearer ${token}` }
-      });
-      
-      setSession(response.data);
-      setCurrentBid(response.data.startingPrice || 0);
-      calculateTimeRemaining(response.data);
+      const response = await api.get(`/auctions/sessions/${sessionId}`);
+
+      setSession(response);
+      setCurrentBid(response.startingPrice || 0);
+      calculateTimeRemaining(response);
     } catch (error) {
       console.error('Failed to fetch session details:', error);
     } finally {
@@ -55,14 +53,11 @@ const LiveBidding = () => {
 
   const fetchBidHistory = async () => {
     try {
-      const response = await axios.get(`/api/auctions/sessions/${sessionId}/bids`, {
-        headers: { Authorization: `Bearer ${token}` },
-        baseURL: 'http://localhost:5001'
-      });
-      
-      setBidHistory(response.data);
-      if (response.data.length > 0) {
-        setCurrentBid(response.data[0].amount);
+      const response = await api.get(`/auctions/sessions/${sessionId}/bids`);
+
+      setBidHistory(response || []);
+      if (response && response.length > 0) {
+        setCurrentBid(response[0].amount);
       }
     } catch (error) {
       console.error('Failed to fetch bid history:', error);
@@ -71,12 +66,9 @@ const LiveBidding = () => {
 
   const fetchParticipants = async () => {
     try {
-      const response = await axios.get(`/api/auctions/sessions/${sessionId}/participants`, {
-        headers: { Authorization: `Bearer ${token}` },
-        baseURL: 'http://localhost:5001'
-      });
-      
-      setParticipants(response.data);
+      const response = await api.get(`/auctions/sessions/${sessionId}/participants`);
+
+      setParticipants(response || []);
     } catch (error) {
       console.error('Failed to fetch participants:', error);
     }
@@ -86,7 +78,7 @@ const LiveBidding = () => {
     const now = new Date();
     const sessionStart = new Date(sessionData.dateTime);
     const sessionEnd = new Date(sessionStart.getTime() + (sessionData.duration * 60 * 1000));
-    
+
     if (now < sessionStart) {
       setTimeRemaining(Math.max(0, sessionStart - now));
     } else if (now <= sessionEnd) {
@@ -106,6 +98,114 @@ const LiveBidding = () => {
     }, 2000); // Update every 2 seconds
   };
 
+  // Farmer Produce Form State
+  const [showProduceForm, setShowProduceForm] = useState(false);
+  const [myProduce, setMyProduce] = useState(null);
+  const [produceFormData, setProduceFormData] = useState({
+    title: '',
+    category: 'VEGETABLES',
+    quantity: '',
+    unit: 'kg',
+    basePrice: '',
+    grade: 'A',
+    variety: '',
+    description: ''
+  });
+
+  useEffect(() => {
+    if (user?.role === 'FARMER') {
+      checkMyProduce();
+    }
+  }, [sessionId, user]);
+
+  const checkMyProduce = async () => {
+    try {
+      const response = await api.get('/auctions/farmer/auctions');
+      // Check if any produce is linked to this session
+      const sessionProduce = response.data.find(p => p.sessionId === sessionId);
+      if (sessionProduce) {
+        setMyProduce(sessionProduce);
+        setShowProduceForm(false);
+      } else {
+        setShowProduceForm(true);
+      }
+    } catch (error) {
+      console.error('Failed to check farmer produce:', error);
+    }
+  };
+
+  useEffect(() => {
+    // Notify backend of presence
+    const enterSession = async () => {
+      try {
+        await api.post(`/auctions/sessions/${sessionId}/enter`);
+      } catch (error) {
+        console.error('Failed to enter session:', error);
+      }
+    };
+
+    enterSession();
+
+    return () => {
+      // Notify backend of exit on unmount
+      api.post(`/auctions/sessions/${sessionId}/exit`).catch(console.error);
+    };
+  }, [sessionId]);
+
+  const handleExit = async () => {
+    try {
+      if (window.confirm('Are you sure you want to exit the auction? The auction will end if all participants leave.')) {
+        await api.post(`/auctions/sessions/${sessionId}/exit`);
+        // Navigate based on role
+        if (user?.role === 'FARMER') {
+          window.location.href = '/farmer/dashboard';
+        } else {
+          window.location.href = '/buyer/dashboard';
+        }
+      }
+    } catch (error) {
+      console.error('Exit error:', error);
+    }
+  };
+
+  const handleManualEnd = async () => {
+    if (window.confirm('Are you sure you want to end the auction now? The current highest bid will be declared the winner.')) {
+      try {
+        await api.post(`/auctions/sessions/${sessionId}/end`);
+        // Stay on page to see results
+      } catch (error) {
+        console.error('End auction error:', error);
+        setMessage('Failed to end auction');
+      }
+    }
+  };
+
+  const handleProduceSubmit = async (e) => {
+    e.preventDefault();
+    setLoading(true);
+    try {
+      if (!session) return;
+
+      const payload = {
+        ...produceFormData,
+        sessionId,
+        auctionStartTime: session.dateTime,
+        auctionEndTime: new Date(new Date(session.dateTime).getTime() + session.duration * 60000).toISOString()
+      };
+
+      await api.post('/auctions', payload);
+      setMessage('Produce listed successfully! Buyers can now bid.');
+      setShowProduceForm(false);
+      checkMyProduce(); // Refresh to see the new produce
+      fetchSessionDetails(); // Refresh session details
+    } catch (error) {
+      console.error('Failed to list produce:', error);
+      setMessage(error.response?.data?.message || 'Failed to list produce');
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const submitBid = async () => {
     if (!bidAmount || parseFloat(bidAmount) <= currentBid) {
       setMessage('Bid amount must be higher than current bid');
@@ -114,20 +214,18 @@ const LiveBidding = () => {
 
     try {
       setBidding(true);
-      await axios.post(`/api/auctions/sessions/${sessionId}/bid`, {
+      await api.post(`/auctions/sessions/${sessionId}/bid`, {
         amount: parseFloat(bidAmount),
         quantity: 1
-      }, {
-        headers: { Authorization: `Bearer ${token}` },
-        baseURL: 'http://localhost:5001'
       });
-      
+
       setBidAmount('');
       setMessage('Bid submitted successfully!');
       fetchBidHistory();
     } catch (error) {
       console.error('Failed to submit bid:', error);
-      setMessage('Failed to submit bid. Please try again.');
+      const errorMsg = error.response?.data?.message || 'Failed to submit bid. Please try again.';
+      setMessage(errorMsg);
     } finally {
       setBidding(false);
     }
@@ -140,7 +238,7 @@ const LiveBidding = () => {
     return `${minutes}:${seconds.toString().padStart(2, '0')}`;
   };
 
-  if (loading) {
+  if (loading && !showProduceForm) {
     return (
       <div className="min-h-screen flex items-center justify-center">
         <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
@@ -148,7 +246,7 @@ const LiveBidding = () => {
     );
   }
 
-  if (!session) {
+  if (!session && !loading) {
     return (
       <div className="min-h-screen flex items-center justify-center">
         <div className="text-center">
@@ -159,11 +257,136 @@ const LiveBidding = () => {
     );
   }
 
-  const isActive = session.status === 'LIVE';
-  const hasEnded = timeRemaining === 0 && session.status === 'COMPLETED';
+  const isActive = session?.status === 'LIVE';
+  const hasEnded = timeRemaining === 0 && session?.status === 'COMPLETED';
 
   return (
-    <div className="min-h-screen bg-gray-50">
+    <div className="min-h-screen bg-gray-50 relative">
+      {/* Farmer Produce Listing Modal */}
+      {showProduceForm && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-lg shadow-xl max-w-2xl w-full max-h-[90vh] overflow-y-auto p-6">
+            <h2 className="text-2xl font-bold text-gray-900 mb-4">List Your Produce</h2>
+            <p className="text-gray-600 mb-6">Enter details for your produce in this auction session.</p>
+
+            <form onSubmit={handleProduceSubmit} className="space-y-4">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Product Title</label>
+                  <input
+                    type="text"
+                    required
+                    value={produceFormData.title}
+                    onChange={(e) => setProduceFormData({ ...produceFormData, title: e.target.value })}
+                    className="w-full px-3 py-2 border rounded-md focus:ring-blue-500 focus:border-blue-500"
+                    placeholder="e.g. Fresh Tomatoes"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Category</label>
+                  <select
+                    value={produceFormData.category}
+                    onChange={(e) => setProduceFormData({ ...produceFormData, category: e.target.value })}
+                    className="w-full px-3 py-2 border rounded-md focus:ring-blue-500 focus:border-blue-500"
+                  >
+                    {['VEGETABLES', 'FRUITS', 'GRAINS', 'PULSES', 'SPICES', 'DAIRY', 'OILSEEDS', 'ORGANIC'].map(c => (
+                      <option key={c} value={c}>{c}</option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Quantity</label>
+                  <div className="flex">
+                    <input
+                      type="number"
+                      required
+                      value={produceFormData.quantity}
+                      onChange={(e) => setProduceFormData({ ...produceFormData, quantity: e.target.value })}
+                      className="w-full px-3 py-2 border rounded-l-md focus:ring-blue-500 focus:border-blue-500"
+                      placeholder="0.00"
+                    />
+                    <select
+                      value={produceFormData.unit}
+                      onChange={(e) => setProduceFormData({ ...produceFormData, unit: e.target.value })}
+                      className="bg-gray-50 border border-l-0 rounded-r-md px-3 py-2 text-gray-500"
+                    >
+                      <option value="kg">kg</option>
+                      <option value="ton">ton</option>
+                      <option value="quintal">quintal</option>
+                    </select>
+                  </div>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Base Price (₹)</label>
+                  <input
+                    type="number"
+                    required
+                    value={produceFormData.basePrice}
+                    onChange={(e) => setProduceFormData({ ...produceFormData, basePrice: e.target.value })}
+                    className="w-full px-3 py-2 border rounded-md focus:ring-blue-500 focus:border-blue-500"
+                    placeholder="Minimum bid amount"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Grade</label>
+                  <select
+                    value={produceFormData.grade}
+                    onChange={(e) => setProduceFormData({ ...produceFormData, grade: e.target.value })}
+                    className="w-full px-3 py-2 border rounded-md focus:ring-blue-500 focus:border-blue-500"
+                  >
+                    <option value="A">Grade A (Premium)</option>
+                    <option value="B">Grade B (Standard)</option>
+                    <option value="C">Grade C (Fair)</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Variety (Optional)</label>
+                  <input
+                    type="text"
+                    value={produceFormData.variety}
+                    onChange={(e) => setProduceFormData({ ...produceFormData, variety: e.target.value })}
+                    className="w-full px-3 py-2 border rounded-md focus:ring-blue-500 focus:border-blue-500"
+                    placeholder="e.g. Desi, Hybrid"
+                  />
+                </div>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Description (Optional)</label>
+                <textarea
+                  value={produceFormData.description}
+                  onChange={(e) => setProduceFormData({ ...produceFormData, description: e.target.value })}
+                  rows="3"
+                  className="w-full px-3 py-2 border rounded-md focus:ring-blue-500 focus:border-blue-500"
+                  placeholder="Additional details about the produce..."
+                ></textarea>
+              </div>
+              <div className="flex justify-end space-x-3 pt-4">
+                {/* Only allow cancel if checking produce failed or user wants to just watch */}
+                <button
+                  type="button"
+                  onClick={() => setShowProduceForm(false)}
+                  className="px-4 py-2 border border-gray-300 rounded-md text-gray-700 hover:bg-gray-50"
+                >
+                  Skip / Watch Only
+                </button>
+                <button
+                  type="submit"
+                  disabled={loading}
+                  className="px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 disabled:opacity-50"
+                >
+                  {loading ? 'Listing...' : 'Start Auction'}
+                </button>
+              </div>
+              {message && (
+                <div className={`mt-4 p-3 rounded-lg ${message.toLowerCase().includes('success') ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}`}>
+                  {message}
+                </div>
+              )}
+            </form>
+          </div>
+        </div>
+      )}
+
       {/* Header */}
       <div className="bg-white shadow-sm border-b">
         <div className="max-w-7xl mx-auto px-4 py-4">
@@ -190,6 +413,12 @@ const LiveBidding = () => {
                 <div className="text-sm font-medium text-gray-900">{bidHistory.length}</div>
                 <div className="text-xs text-gray-500">Total Bids</div>
               </div>
+              <button
+                onClick={handleExit}
+                className="px-4 py-2 bg-red-600 text-white rounded-md hover:bg-red-700 transition-colors text-sm font-medium"
+              >
+                Exit Auction
+              </button>
             </div>
           </div>
         </div>
@@ -235,12 +464,24 @@ const LiveBidding = () => {
                     </button>
                   </div>
                   {message && (
-                    <div className={`mt-4 p-3 rounded-lg ${
-                      message.includes('successfully') ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'
-                    }`}>
+                    <div className={`mt-4 p-3 rounded-lg ${message.includes('successfully') ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'
+                      }`}>
                       {message}
                     </div>
                   )}
+                </div>
+              )}
+
+              {isActive && user?.role === 'FARMER' && (
+                <div className="border-t pt-6 text-center">
+                  <p className="text-gray-600 mb-4">You are monitoring your live auction</p>
+                  <button
+                    onClick={handleManualEnd}
+                    disabled={currentBid === 0}
+                    className="px-6 py-3 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed font-medium"
+                  >
+                    {currentBid > 0 ? 'Accept Highest Bid & End Auction' : 'Waiting for Bids...'}
+                  </button>
                 </div>
               )}
 
@@ -327,5 +568,3 @@ const LiveBidding = () => {
 };
 
 export default LiveBidding;
-
-

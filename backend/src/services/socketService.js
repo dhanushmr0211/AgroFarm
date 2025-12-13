@@ -38,7 +38,7 @@ class SocketService {
 
     this.io.on('connection', (socket) => {
       console.log(`🔌 User ${socket.user.name} (${socket.userId}) connected`);
-      
+
       // Store user connection
       this.connectedUsers.set(socket.userId, socket.id);
 
@@ -52,16 +52,23 @@ class SocketService {
       socket.on('disconnect', () => {
         console.log(`🔌 User ${socket.user.name} (${socket.userId}) disconnected`);
         this.connectedUsers.delete(socket.userId);
-        
+
         // Remove from auction rooms
         this.auctionRooms.forEach((users, produceId) => {
           if (users.has(socket.userId)) {
             users.delete(socket.userId);
+
+            // Notify others
             socket.to(`auction_${produceId}`).emit('user_left_auction', {
               userId: socket.userId,
               userName: socket.user.name,
               participantCount: users.size
             });
+
+            // Check if room is empty and auction is active
+            if (users.size === 0) {
+              this.checkAndEndAuction(produceId);
+            }
           }
         });
       });
@@ -73,7 +80,7 @@ class SocketService {
     socket.on('join_session', async (data) => {
       try {
         const { sessionId } = data;
-        
+
         // Validate session exists and is live
         const session = await prisma.auctionSession.findUnique({
           where: { id: sessionId },
@@ -98,7 +105,7 @@ class SocketService {
 
         // Join session room
         socket.join(`session_${sessionId}`);
-        
+
         // Add user to session room tracking
         if (!this.auctionRooms.has(sessionId)) {
           this.auctionRooms.set(sessionId, new Set());
@@ -113,7 +120,7 @@ class SocketService {
         };
 
         socket.emit('session_joined', sessionState);
-        
+
         // Notify other participants
         socket.to(`session_${sessionId}`).emit('user_joined_session', {
           userId: socket.userId,
@@ -132,12 +139,12 @@ class SocketService {
     // Leave session room
     socket.on('leave_session', (data) => {
       const { sessionId } = data;
-      
+
       socket.leave(`session_${sessionId}`);
-      
+
       if (this.auctionRooms.has(sessionId)) {
         this.auctionRooms.get(sessionId).delete(socket.userId);
-        
+
         socket.to(`session_${sessionId}`).emit('user_left_session', {
           userId: socket.userId,
           userName: socket.user.name,
@@ -150,12 +157,12 @@ class SocketService {
     socket.on('send_message', async (data) => {
       try {
         const { sessionId, message, type = 'MESSAGE' } = data;
-        
+
         // Validate session
         const session = await prisma.auctionSession.findUnique({
           where: { id: sessionId }
         });
-        
+
         if (!session || session.status !== 'LIVE') {
           socket.emit('error', { message: 'Session not found or not live' });
           return;
@@ -185,7 +192,7 @@ class SocketService {
     socket.on('join_auction', async (data) => {
       try {
         const { produceId } = data;
-        
+
         // Validate produce exists and auction is live
         const produce = await prisma.produce.findUnique({
           where: { id: produceId },
@@ -212,7 +219,7 @@ class SocketService {
 
         // Join auction room
         socket.join(`auction_${produceId}`);
-        
+
         // Add user to auction room tracking
         if (!this.auctionRooms.has(produceId)) {
           this.auctionRooms.set(produceId, new Set());
@@ -228,7 +235,7 @@ class SocketService {
         };
 
         socket.emit('auction_joined', auctionState);
-        
+
         // Notify other participants
         socket.to(`auction_${produceId}`).emit('user_joined_auction', {
           userId: socket.userId,
@@ -247,12 +254,12 @@ class SocketService {
     // Leave auction room
     socket.on('leave_auction', (data) => {
       const { produceId } = data;
-      
+
       socket.leave(`auction_${produceId}`);
-      
+
       if (this.auctionRooms.has(produceId)) {
         this.auctionRooms.get(produceId).delete(socket.userId);
-        
+
         socket.to(`auction_${produceId}`).emit('user_left_auction', {
           userId: socket.userId,
           userName: socket.user.name,
@@ -304,15 +311,15 @@ class SocketService {
         const minimumBid = currentHighestBid + (produce.basePrice * 0.01); // 1% increment
 
         if (amount <= currentHighestBid) {
-          socket.emit('bid_error', { 
-            message: `Bid must be higher than current bid of ₹${currentHighestBid}` 
+          socket.emit('bid_error', {
+            message: `Bid must be higher than current bid of ₹${currentHighestBid}`
           });
           return;
         }
 
         if (amount < minimumBid) {
-          socket.emit('bid_error', { 
-            message: `Minimum bid increment is ₹${Math.ceil(minimumBid - currentHighestBid)}` 
+          socket.emit('bid_error', {
+            message: `Minimum bid increment is ₹${Math.ceil(minimumBid - currentHighestBid)}`
           });
           return;
         }
@@ -323,8 +330,8 @@ class SocketService {
         });
 
         if (!wallet || wallet.balance < amount) {
-          socket.emit('bid_error', { 
-            message: 'Insufficient wallet balance. Please add funds to continue bidding.' 
+          socket.emit('bid_error', {
+            message: 'Insufficient wallet balance. Please add funds to continue bidding.'
           });
           return;
         }
@@ -346,9 +353,9 @@ class SocketService {
         // Update produce current bid
         await prisma.produce.update({
           where: { id: produceId },
-          data: { 
+          data: {
             currentBid: amount,
-            winningBidId: newBid.id 
+            winningBidId: newBid.id
           }
         });
 
@@ -404,7 +411,7 @@ class SocketService {
     socket.on('get_auction_updates', async (data) => {
       try {
         const { produceId } = data;
-        
+
         const produce = await prisma.produce.findUnique({
           where: { id: produceId },
           include: {
@@ -449,7 +456,7 @@ class SocketService {
     socket.on('mark_notifications_read', async (data) => {
       try {
         const { notificationIds } = data;
-        
+
         await prisma.notification.updateMany({
           where: {
             userId: socket.userId,
@@ -507,7 +514,7 @@ class SocketService {
         this.io.to(`auction_${produceId}`).emit('auction_ended', {
           produce,
           winningBid: produce.winningBid,
-          message: produce.winningBid 
+          message: produce.winningBid
             ? `Auction ended! Winner: ${produce.winningBid.bidder.name} with ₹${produce.winningBid.amount}`
             : 'Auction ended with no bids'
         });
@@ -588,6 +595,80 @@ class SocketService {
   // Get auction participants
   getAuctionParticipants(produceId) {
     return this.auctionRooms.get(produceId)?.size || 0;
+  }
+  // Check and end auction if empty
+  async checkAndEndAuction(produceId) {
+    try {
+      // Small delay to allow reconnection or race conditions
+      setTimeout(async () => {
+        const users = this.auctionRooms.get(produceId);
+        if (users && users.size > 0) return; // Someone joined back
+
+        await this.endAuction(produceId);
+      }, 5000); // 5 second grace period
+    } catch (error) {
+      console.error('Check and end auction error:', error);
+    }
+  }
+
+  // Force end auction (Manual or Auto)
+  async endAuction(produceId) {
+    try {
+      const produce = await prisma.produce.findUnique({
+        where: { id: produceId },
+        include: { winningBid: true }
+      });
+
+      if (produce && produce.status === 'LIVE') {
+        console.log(`🛑 Ending auction ${produce.title}...`);
+
+        await prisma.produce.update({
+          where: { id: produceId },
+          data: { status: 'COMPLETED' }
+        });
+
+        // Finalize bids
+        if (produce.winningBidId) {
+          await prisma.bid.update({
+            where: { id: produce.winningBidId },
+            data: { status: 'WON' }
+          });
+          await prisma.bid.updateMany({
+            where: {
+              produceId: produce.id,
+              id: { not: produce.winningBidId },
+              status: 'ACTIVE'
+            },
+            data: { status: 'LOST' }
+          });
+          console.log(`🏆 Winning bid stored for ${produce.title}`);
+        }
+
+        await this.broadcastAuctionEnd(produceId);
+      }
+    } catch (error) {
+      console.error('End auction error:', error);
+    }
+  }
+  // API-based presence tracking
+  enterAuction(produceId, userId) {
+    if (!this.auctionRooms.has(produceId)) {
+      this.auctionRooms.set(produceId, new Set());
+    }
+    this.auctionRooms.get(produceId).add(userId);
+    console.log(`👤 API User ${userId} active in auction ${produceId}`);
+  }
+
+  leaveAuction(produceId, userId) {
+    if (this.auctionRooms.has(produceId)) {
+      const users = this.auctionRooms.get(produceId);
+      users.delete(userId);
+      console.log(`👤 API User ${userId} left auction ${produceId}. Remaining: ${users.size}`);
+
+      if (users.size === 0) {
+        this.checkAndEndAuction(produceId);
+      }
+    }
   }
 }
 

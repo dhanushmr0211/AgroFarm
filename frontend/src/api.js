@@ -1,13 +1,6 @@
 import axios from 'axios';
 
-// Prefer localhost when the app is served from localhost to avoid stale env URLs
-const hostname = typeof window !== 'undefined' ? window.location.hostname : 'localhost';
-const envUrl = (typeof import.meta !== 'undefined' && import.meta.env) ? import.meta.env.VITE_API_URL : undefined;
-const computedLocalUrl = `http://${hostname}:5001`;
-// If on localhost/127.0.0.1, force localhost even if VITE_API_URL is set
-const API_BASE = (hostname === 'localhost' || hostname === '127.0.0.1')
-  ? 'http://localhost:5001/api'
-  : (envUrl || `${computedLocalUrl}/api`);
+const API_BASE = 'http://localhost:5001/api';
 
 const api = axios.create({
   baseURL: API_BASE,
@@ -37,10 +30,10 @@ api.interceptors.request.use((config) => {
 api.interceptors.response.use(
   (response) => response.data,
   (error) => {
-    // optional: handle 401 globally
     if (error.response && error.response.status === 401) {
-      // clear token or trigger logout flow if needed
-      // localStorage.removeItem('token');
+      // Clear invalid token and redirect to login
+      localStorage.removeItem('token');
+      window.location.href = '/login';
     }
     return Promise.reject(error);
   }

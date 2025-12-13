@@ -8,6 +8,7 @@ const Navbar = () => {
   const navigate = useNavigate()
   const location = useLocation()
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false)
+  const [isProfileMenuOpen, setIsProfileMenuOpen] = useState(false)
   const [isScrolled, setIsScrolled] = useState(false)
 
   // Handle scroll effect
@@ -35,8 +36,8 @@ const Navbar = () => {
   return (
     <nav
       className={`fixed top-0 left-0 right-0 z-50 transition-all duration-300 ${isScrolled
-          ? 'bg-white/80 backdrop-blur-md shadow-glass py-2'
-          : 'bg-white py-4'
+        ? 'bg-white/80 backdrop-blur-md shadow-glass py-2'
+        : 'bg-white py-4'
         }`}
     >
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
@@ -87,8 +88,8 @@ const Navbar = () => {
                 <Link
                   to="/wallet"
                   className={`flex items-center space-x-1.5 px-3 py-1.5 rounded-full transition-all ${isActivePath('/wallet')
-                      ? 'bg-primary-50 text-primary-700 font-medium'
-                      : 'text-earth-600 hover:bg-earth-50'
+                    ? 'bg-primary-50 text-primary-700 font-medium'
+                    : 'text-earth-600 hover:bg-earth-50'
                     }`}
                 >
                   <Wallet size={16} />
@@ -96,38 +97,53 @@ const Navbar = () => {
                 </Link>
 
                 {/* User Menu */}
-                <div className="relative group">
-                  <button className="flex items-center space-x-2 text-earth-700 hover:text-primary-700 transition-colors">
+                <div className="relative">
+                  <button
+                    onClick={() => setIsProfileMenuOpen(!isProfileMenuOpen)}
+                    className="flex items-center space-x-2 text-earth-700 hover:text-primary-700 transition-colors focus:outline-none"
+                  >
                     <div className="w-8 h-8 rounded-full bg-primary-100 flex items-center justify-center text-primary-700 font-bold text-sm">
                       {user?.name?.[0]?.toUpperCase()}
                     </div>
                     <span className="text-sm font-medium">{user?.name}</span>
-                    <ChevronDown size={14} className="text-earth-400 group-hover:text-primary-500 transition-transform group-hover:rotate-180" />
+                    <ChevronDown size={14} className={`text-earth-400 transition-transform ${isProfileMenuOpen ? 'rotate-180' : ''}`} />
                   </button>
 
                   {/* Dropdown */}
-                  <div className="absolute right-0 mt-2 w-56 bg-white rounded-2xl shadow-xl border border-earth-100 opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-200 transform origin-top-right">
-                    <div className="py-2">
-                      <div className="px-4 py-2 border-b border-earth-50 mb-1">
-                        <p className="text-xs text-earth-400 font-medium uppercase tracking-wider">Signed in as</p>
-                        <p className="text-sm font-bold text-earth-900 truncate">{user?.email}</p>
+                  {isProfileMenuOpen && (
+                    <>
+                      <div
+                        className="fixed inset-0 z-10"
+                        onClick={() => setIsProfileMenuOpen(false)}
+                      ></div>
+                      <div className="absolute right-0 mt-2 w-56 bg-white rounded-2xl shadow-xl border border-earth-100 z-20 animate-fade-in-up">
+                        <div className="py-2">
+                          <div className="px-4 py-2 border-b border-earth-50 mb-1">
+                            <p className="text-xs text-earth-400 font-medium uppercase tracking-wider">Signed in as</p>
+                            <p className="text-sm font-bold text-earth-900 truncate">{user?.email}</p>
+                          </div>
+                          <Link
+                            to="/profile"
+                            className="flex items-center space-x-2 px-4 py-2.5 text-sm text-earth-600 hover:bg-primary-50 hover:text-primary-700 transition-colors"
+                            onClick={() => setIsProfileMenuOpen(false)}
+                          >
+                            <User size={16} />
+                            <span>Profile</span>
+                          </Link>
+                          <button
+                            onClick={() => {
+                              handleLogout()
+                              setIsProfileMenuOpen(false)
+                            }}
+                            className="w-full flex items-center space-x-2 px-4 py-2.5 text-sm text-red-600 hover:bg-red-50 transition-colors text-left"
+                          >
+                            <LogOut size={16} />
+                            <span>Sign out</span>
+                          </button>
+                        </div>
                       </div>
-                      <Link
-                        to="/profile"
-                        className="flex items-center space-x-2 px-4 py-2.5 text-sm text-earth-600 hover:bg-primary-50 hover:text-primary-700 transition-colors"
-                      >
-                        <User size={16} />
-                        <span>Profile</span>
-                      </Link>
-                      <button
-                        onClick={handleLogout}
-                        className="w-full flex items-center space-x-2 px-4 py-2.5 text-sm text-red-600 hover:bg-red-50 transition-colors text-left"
-                      >
-                        <LogOut size={16} />
-                        <span>Sign out</span>
-                      </button>
-                    </div>
-                  </div>
+                    </>
+                  )}
                 </div>
               </>
             ) : (

@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useParams } from 'react-router-dom';
-import axios from 'axios';
+import api from '../api';
 import { connectSocket, getSocket, disconnectSocket } from '../lib/socket';
 
 const LiveAuction = () => {
@@ -56,7 +56,7 @@ const LiveAuction = () => {
         if (s && s.connected) {
           s.emit('leave_auction', { produceId: id });
         }
-      } catch {}
+      } catch { }
       if (socket) {
         socket.off('connect', onConnect);
         socket.off('disconnect', onDisconnect);
@@ -71,12 +71,10 @@ const LiveAuction = () => {
 
   const fetchAuctionData = async () => {
     try {
-      const response = await axios.get(`/api/auctions/${id}`, {
-        headers: { 'Authorization': `Bearer ${localStorage.getItem('token')}` }
-      });
-      
-      if (response.data.success) {
-        const auctionData = response.data.data;
+      const response = await api.get(`/auctions/${id}`);
+
+      if (response.success) {
+        const auctionData = response.data;
         setAuction({
           ...auctionData,
           endTime: new Date(auctionData.endTime),
@@ -100,7 +98,7 @@ const LiveAuction = () => {
     const timer = setInterval(() => {
       const now = new Date();
       const difference = auction.endTime - now;
-      
+
       if (difference > 0) {
         const hours = Math.floor(difference / (1000 * 60 * 60));
         const minutes = Math.floor((difference % (1000 * 60 * 60)) / (1000 * 60));
@@ -129,11 +127,9 @@ const LiveAuction = () => {
 
     const socket = getSocket();
     const token = localStorage.getItem('token');
-    let usedSocket = false;
 
     try {
       if (socket && socket.connected && token) {
-        usedSocket = true;
         socket.emit('place_bid', { produceId: id, amount: bid, quantity: auction.quantity || 1 });
         setBidAmount('');
         return;
@@ -143,11 +139,8 @@ const LiveAuction = () => {
     }
 
     try {
-      const response = await axios.post(`/api/auctions/${id}/bid`, 
-        { amount: bid },
-        { headers: { 'Authorization': `Bearer ${token}` } }
-      );
-      if (response.data.success) {
+      const response = await api.post(`/auctions/${id}/bid`, { amount: bid });
+      if (response.success) {
         await fetchAuctionData();
         setBidAmount('');
         alert('Bid placed successfully!');
@@ -225,8 +218,8 @@ const LiveAuction = () => {
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                 {auction.images.map((image, index) => (
                   <div key={index} className="aspect-w-4 aspect-h-3">
-                    <img 
-                      src={image} 
+                    <img
+                      src={image}
                       alt={`${auction.produce} ${index + 1}`}
                       className="w-full h-48 object-cover rounded-lg border border-gray-200"
                     />
@@ -239,7 +232,7 @@ const LiveAuction = () => {
             <div className="bg-white rounded-xl shadow-lg border border-gray-100 p-6">
               <h2 className="text-xl font-semibold text-gray-900 mb-4">Product Details</h2>
               <p className="text-gray-700 mb-6">{auction.description}</p>
-              
+
               <div className="grid grid-cols-2 gap-4">
                 {Object.entries(auction.specifications).map(([key, value]) => (
                   <div key={key} className="flex justify-between py-2 border-b border-gray-100">
@@ -281,7 +274,7 @@ const LiveAuction = () => {
             {/* Bidding Form */}
             <div className="bg-white rounded-xl shadow-lg border border-gray-100 p-6 sticky top-6">
               <h2 className="text-xl font-semibold text-gray-900 mb-4">Place Your Bid</h2>
-              
+
               <div className="mb-4">
                 <div className="text-sm text-gray-600 mb-2">Current Highest Bid</div>
                 <div className="text-3xl font-bold text-green-600">₹{auction.currentBid.toLocaleString()}</div>

@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../contexts/AuthContext';
+import api from '../api';
 import { CreditCard, Plus, ArrowDownLeft, ArrowUpRight, Clock, CheckCircle } from 'lucide-react';
-import axios from 'axios';
 
 const Wallet = () => {
   const { user } = useAuth();
@@ -14,6 +14,7 @@ const Wallet = () => {
   const [escrowBalance, setEscrowBalance] = useState(0);
   const [loading, setLoading] = useState(true);
 
+  const [escrowTransactions, setEscrowTransactions] = useState([]);
   const [transactions, setTransactions] = useState([]);
 
   useEffect(() => {
@@ -24,47 +25,38 @@ const Wallet = () => {
     try {
       setLoading(true);
       // Fetch wallet balance
-      const walletResponse = await axios.get('/api/wallet', {
-        headers: { 'Authorization': `Bearer ${localStorage.getItem('token')}` }
-      });
-      
+      const walletResponse = await api.get('/wallet');
+
       // Fetch transaction history
-      const transactionsResponse = await axios.get('/api/wallet/transactions', {
-        headers: { 'Authorization': `Bearer ${localStorage.getItem('token')}` }
-      });
-      
-      setWalletBalance(walletResponse.data.data?.balance || 0);
-      setEscrowBalance(walletResponse.data.data?.escrowBalance || 0);
-      setTransactions(transactionsResponse.data.data || []);
+      const transactionsResponse = await api.get('/wallet/transactions');
+
+      // Fetch escrow details
+      const escrowResponse = await api.get('/wallet/escrow');
+
+      if (walletResponse.success) {
+        setWalletBalance(walletResponse.data?.balance || 0);
+        setEscrowBalance(walletResponse.data?.escrowBalance || 0);
+      }
+
+      if (transactionsResponse.success) {
+        setTransactions(transactionsResponse.data || []);
+      }
+
+      if (escrowResponse.success) {
+        setEscrowTransactions(escrowResponse.data || []);
+      }
+
     } catch (error) {
       console.error('Failed to fetch wallet data:', error);
       // Set defaults if API fails
       setWalletBalance(0);
       setEscrowBalance(0);
       setTransactions([]);
+      setEscrowTransactions([]);
     } finally {
       setLoading(false);
     }
   };
-
-  const escrowTransactions = [
-    {
-      id: 1,
-      amount: 5000,
-      description: 'Wheat Grade A - Quality verification pending',
-      farmer: 'Rajesh Kumar',
-      date: '2024-01-23',
-      expectedRelease: '2024-01-25'
-    },
-    {
-      id: 2,
-      amount: 3500,
-      description: 'Tomato Grade A+ - Delivery confirmed',
-      farmer: 'Priya Patel',
-      date: '2024-01-22',
-      expectedRelease: '2024-01-24'
-    }
-  ];
 
   const handleAddFunds = async () => {
     if (!addAmount || addAmount <= 0) {
@@ -74,19 +66,56 @@ const Wallet = () => {
 
     try {
       // Create Razorpay order
-      const orderResponse = await axios.post('/api/payments/create-order', {
+      const orderResponse = await api.post('/payments/create-order', {
         amount: parseInt(addAmount),
         currency: 'INR',
         receipt: `wallet_topup_${Date.now()}`
-      }, {
-        headers: { 'Authorization': `Bearer ${localStorage.getItem('token')}` }
       });
 
-      if (!orderResponse.data.success) {
+      if (!orderResponse.success) {
         throw new Error('Failed to create payment order');
       }
 
-      const { data: order } = orderResponse.data;
+      const { data: order } = orderResponse;
+
+      // Common verification handler
+      const handlePaymentVerification = async (response) => {
+        try {
+          // Verify payment on backend
+          const verifyResponse = await api.post('/payments/verify', {
+            razorpay_order_id: response.razorpay_order_id,
+            razorpay_payment_id: response.razorpay_payment_id,
+            razorpay_signature: response.razorpay_signature,
+            type: 'WALLET_TOPUP',
+            amount: order.amount
+          });
+
+          if (verifyResponse.success) {
+            alert('Payment successful! Your wallet has been credited.');
+            setShowAddFundsModal(false);
+            setAddAmount('');
+            fetchWalletData(); // Refresh wallet data
+          } else {
+            alert('Payment verification failed. Please contact support.');
+          }
+        } catch (error) {
+          console.error('Payment verification error:', error);
+          alert('Payment verification failed. Please contact support.');
+        }
+      };
+
+      // CHECK FOR MOCK ORDER (Dev/Test Mode)
+      if (order.id && order.id.startsWith('order_mock_')) {
+        console.log('⚠️ Mock Order detected. Bypassing Razorpay SDK.');
+        const mockResponse = {
+          razorpay_order_id: order.id,
+          razorpay_payment_id: `pay_mock_${Date.now()}`,
+          razorpay_signature: 'mock_signature_bypass'
+        };
+        // Simulate slight delay for realism
+        setTimeout(() => handlePaymentVerification(mockResponse), 1000);
+        return;
+      }
 
       // Razorpay checkout options
       const options = {
@@ -96,32 +125,7 @@ const Wallet = () => {
         name: 'Farmer Bidding Platform',
         description: 'Wallet Top-up',
         order_id: order.id,
-        handler: async function (response) {
-          try {
-            // Verify payment on backend
-            const verifyResponse = await axios.post('/api/payments/verify', {
-              razorpay_order_id: response.razorpay_order_id,
-              razorpay_payment_id: response.razorpay_payment_id,
-              razorpay_signature: response.razorpay_signature,
-              type: 'WALLET_TOPUP',
-              amount: order.amount
-            }, {
-              headers: { 'Authorization': `Bearer ${localStorage.getItem('token')}` }
-            });
-
-            if (verifyResponse.data.success) {
-              alert('Payment successful! Your wallet has been credited.');
-              setShowAddFundsModal(false);
-              setAddAmount('');
-              fetchWalletData(); // Refresh wallet data
-            } else {
-              alert('Payment verification failed. Please contact support.');
-            }
-          } catch (error) {
-            console.error('Payment verification error:', error);
-            alert('Payment verification failed. Please contact support.');
-          }
-        },
+        handler: handlePaymentVerification,
         prefill: {
           name: user?.name || '',
           email: user?.email || '',
@@ -131,7 +135,7 @@ const Wallet = () => {
           color: '#16a34a' // Green theme matching your platform
         },
         modal: {
-          ondismiss: function() {
+          ondismiss: function () {
             console.log('Payment modal closed');
           }
         }
@@ -233,31 +237,28 @@ const Wallet = () => {
             <nav className="-mb-px flex">
               <button
                 onClick={() => setActiveTab('overview')}
-                className={`py-4 px-6 text-sm font-medium border-b-2 ${
-                  activeTab === 'overview'
-                    ? 'border-green-500 text-green-600'
-                    : 'border-transparent text-gray-500 hover:text-gray-700'
-                }`}
+                className={`py-4 px-6 text-sm font-medium border-b-2 ${activeTab === 'overview'
+                  ? 'border-green-500 text-green-600'
+                  : 'border-transparent text-gray-500 hover:text-gray-700'
+                  }`}
               >
                 Overview
               </button>
               <button
                 onClick={() => setActiveTab('transactions')}
-                className={`py-4 px-6 text-sm font-medium border-b-2 ${
-                  activeTab === 'transactions'
-                    ? 'border-green-500 text-green-600'
-                    : 'border-transparent text-gray-500 hover:text-gray-700'
-                }`}
+                className={`py-4 px-6 text-sm font-medium border-b-2 ${activeTab === 'transactions'
+                  ? 'border-green-500 text-green-600'
+                  : 'border-transparent text-gray-500 hover:text-gray-700'
+                  }`}
               >
                 All Transactions
               </button>
               <button
                 onClick={() => setActiveTab('escrow')}
-                className={`py-4 px-6 text-sm font-medium border-b-2 ${
-                  activeTab === 'escrow'
-                    ? 'border-green-500 text-green-600'
-                    : 'border-transparent text-gray-500 hover:text-gray-700'
-                }`}
+                className={`py-4 px-6 text-sm font-medium border-b-2 ${activeTab === 'escrow'
+                  ? 'border-green-500 text-green-600'
+                  : 'border-transparent text-gray-500 hover:text-gray-700'
+                  }`}
               >
                 Escrow Funds
               </button>
@@ -279,9 +280,8 @@ const Wallet = () => {
                         </div>
                       </div>
                       <div className="text-right">
-                        <p className={`font-semibold ${
-                          transaction.type === 'credit' ? 'text-green-600' : 'text-red-600'
-                        }`}>
+                        <p className={`font-semibold ${transaction.type === 'credit' ? 'text-green-600' : 'text-red-600'
+                          }`}>
                           {transaction.type === 'credit' ? '+' : '-'}₹{transaction.amount.toLocaleString()}
                         </p>
                         <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${getStatusBadge(transaction.status)}`}>
@@ -332,9 +332,8 @@ const Wallet = () => {
                             <div className="text-sm text-gray-500">{transaction.time}</div>
                           </td>
                           <td className="px-6 py-4 whitespace-nowrap">
-                            <div className={`text-sm font-semibold ${
-                              transaction.type === 'credit' ? 'text-green-600' : 'text-red-600'
-                            }`}>
+                            <div className={`text-sm font-semibold ${transaction.type === 'credit' ? 'text-green-600' : 'text-red-600'
+                              }`}>
                               {transaction.type === 'credit' ? '+' : '-'}₹{transaction.amount.toLocaleString()}
                             </div>
                           </td>
@@ -399,7 +398,7 @@ const Wallet = () => {
                   ✕
                 </button>
               </div>
-              
+
               <div className="space-y-4">
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-2">

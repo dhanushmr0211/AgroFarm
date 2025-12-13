@@ -23,6 +23,99 @@ const parseImages = (item) => {
   return item;
 };
 
+// Get APMCs (for dropdown) - MOVED TO TOP
+router.get('/apmcs', authenticateToken, async (req, res) => {
+  try {
+    const apmcs = await prisma.aPMC.findMany({
+      where: { isActive: true },
+      select: { id: true, name: true, location: true }
+    });
+    res.json(apmcs);
+  } catch (error) {
+    console.error('Get APMCs error:', error);
+    res.status(500).json({ success: false, message: 'Failed to fetch APMCs' });
+  }
+});
+
+// Get current user's (Farmer/Buyer) booking requests - MOVED TO TOP TO AVOID 404
+router.get('/my-booking-requests', authenticateToken, authorizeRoles('FARMER', 'BUYER'), async (req, res) => {
+  try {
+    const requests = await prisma.bookingRequest.findMany({
+      where: { userId: req.user.id },
+      include: {
+        session: { // Include session details to match frontend expectations if needed, or stick to apmc
+          include: { apmc: { select: { name: true, location: true } } }
+        },
+        reviewer: { select: { name: true } }
+      },
+      orderBy: { createdAt: 'desc' }
+    });
+
+    res.json(requests);
+  } catch (error) {
+    console.error('Get booking requests error:', error);
+    res.status(500).json({ success: false, message: 'Failed to fetch booking requests' });
+  }
+});
+
+// Get all sessions (Admin, Farmer, Buyer) - MOVED TO TOP
+router.get('/sessions', authenticateToken, authorizeRoles('ADMIN', 'FARMER', 'BUYER'), async (req, res) => {
+  try {
+    const sessions = await prisma.auctionSession.findMany({
+      include: {
+        apmc: { select: { name: true, location: true } },
+        registrations: { select: { id: true } },
+        _count: { select: { registrations: true } }
+      },
+      orderBy: { startTime: 'desc' }
+    });
+
+    const sessionsWithCounts = sessions.map(session => ({
+      ...session,
+      participants: session.registrations,
+      // Computed fields for frontend display
+      title: `${session.apmc.name} Auction Session`,
+      description: `Auction session at ${session.apmc.name}`,
+      dateTime: session.startTime,
+      duration: Math.round((new Date(session.endTime) - new Date(session.startTime)) / 60000), // Duration in minutes
+      maxParticipants: session.capacityFarmers + session.capacityBuyers
+    }));
+
+    res.json(sessionsWithCounts);
+  } catch (error) {
+    console.error('Get all sessions error:', error);
+    res.status(500).json({ success: false, message: 'Failed to fetch sessions' });
+  }
+});
+
+// Get all booking requests (Admin) - MOVED TO TOP
+router.get('/booking-requests', authenticateToken, authorizeRoles('ADMIN'), async (req, res) => {
+  try {
+    const requests = await prisma.bookingRequest.findMany({
+      include: {
+        user: { select: { name: true, email: true } },
+        session: {
+          include: {
+            apmc: { select: { name: true, location: true } }
+          }
+        }
+      },
+      orderBy: { createdAt: 'desc' }
+    });
+
+    const finalRequests = requests.map(req => ({
+      ...req,
+      farmer: req.user,
+      apmc: req.session?.apmc
+    }));
+
+    res.json(finalRequests);
+  } catch (error) {
+    console.error('Get all booking requests error:', error);
+    res.status(500).json({ success: false, message: 'Failed to fetch booking requests' });
+  }
+});
+
 // Admin: Create session
 router.post('/sessions', authenticateToken, authorizeRoles('ADMIN'), async (req, res) => {
   try {
@@ -55,6 +148,7 @@ router.post('/sessions', authenticateToken, authorizeRoles('ADMIN'), async (req,
       ...session,
       title,
       description,
+      dateTime: startTime, // Frontend expects dateTime
       duration: duration || 60,
       maxParticipants: parseInt(maxParticipants) || 50
     };
@@ -506,6 +600,55 @@ router.get('/sessions/:id/chat', authenticateToken, async (req, res) => {
   }
 });
 
+// Get single session details
+router.get('/sessions/:id', authenticateToken, async (req, res) => {
+  try {
+    const { id } = req.params;
+    const session = await prisma.auctionSession.findUnique({
+      where: { id },
+      include: {
+        apmc: { select: { id: true, name: true, location: true } },
+        _count: { select: { registrations: true, produce: true } }
+      }
+    });
+
+    if (!session) {
+      return res.status(404).json({ success: false, message: 'Session not found' });
+    }
+
+    // Get starting price from active or next upcoming produce
+    const activeProduce = await prisma.produce.findFirst({
+      where: {
+        sessionId: id,
+        status: { in: ['LIVE', 'UPCOMING'] }
+      },
+      orderBy: [
+        { status: 'asc' }, // LIVE before UPCOMING
+        { auctionStartTime: 'asc' }
+      ]
+    });
+
+    // Transform data to match frontend expectations
+    const transformedSession = {
+      id: session.id,
+      title: `${session.apmc.name} Auction Session`,
+      description: `Auction session at ${session.apmc.name}`,
+      dateTime: session.startTime,
+      duration: Math.round((new Date(session.endTime) - new Date(session.startTime)) / 60000), // Duration in minutes
+      maxParticipants: session.capacityFarmers + session.capacityBuyers,
+      status: session.status,
+      apmc: session.apmc,
+      participants: session._count.registrations || 0,
+      startingPrice: activeProduce ? (activeProduce.currentBid || activeProduce.basePrice) : 0
+    };
+
+    res.json(transformedSession);
+  } catch (error) {
+    console.error('Get session details error:', error);
+    res.status(500).json({ success: false, message: 'Failed to fetch session details' });
+  }
+});
+
 // Get session with farmer queue
 router.get('/sessions/:id/queue', authenticateToken, async (req, res) => {
   try {
@@ -904,8 +1047,14 @@ router.post('/', authenticateToken, authorizeRoles('FARMER'), async (req, res) =
       images = []
     } = req.body;
 
+    console.log('Create Auction Request:', {
+      body: req.body,
+      user: req.user
+    });
+
     // Validation
     if (!title || !category || !quantity || !basePrice || !auctionStartTime || !auctionEndTime) {
+      console.log('Missing required fields:', { title, category, quantity, basePrice, auctionStartTime, auctionEndTime });
       return res.status(400).json({
         success: false,
         message: 'Required fields: title, category, quantity, basePrice, auctionStartTime, auctionEndTime'
@@ -915,7 +1064,8 @@ router.post('/', authenticateToken, authorizeRoles('FARMER'), async (req, res) =
     const startTime = new Date(auctionStartTime);
     const endTime = new Date(auctionEndTime);
 
-    if (startTime <= new Date()) {
+    // Only validate start time for standalone auctions (no session)
+    if (!req.body.sessionId && startTime <= new Date()) {
       return res.status(400).json({
         success: false,
         message: 'Auction start time must be in the future'
@@ -945,9 +1095,13 @@ router.post('/', authenticateToken, authorizeRoles('FARMER'), async (req, res) =
       if (session.apmcId !== user.apmcId) {
         return res.status(400).json({ success: false, message: 'Session does not belong to your APMC' });
       }
-      if (new Date(session.startTime) <= new Date()) {
-        return res.status(400).json({ success: false, message: 'Cannot list after session start' });
+
+      // Allow listing even if session has started (for late joiners/just-in-time listing)
+      // but ensure session hasn't ENDED
+      if (['COMPLETED', 'CANCELLED'].includes(session.status)) {
+        return res.status(400).json({ success: false, message: 'Cannot list in a completed or cancelled session' });
       }
+
       sessionId = session.id;
     }
 
@@ -1083,7 +1237,7 @@ router.get('/sessions/:id/bids', authenticateToken, async (req, res) => {
 
     const bids = await prisma.bid.findMany({
       where: {
-        sessionId: id
+        produce: { sessionId: id }
       },
       include: {
         bidder: {
@@ -1110,7 +1264,7 @@ router.get('/sessions/:id/bids', authenticateToken, async (req, res) => {
 });
 
 // Place a bid
-router.post('/sessions/:id/bid', authenticateToken, authorizeRoles(['BUYER']), async (req, res) => {
+router.post('/sessions/:id/bid', authenticateToken, authorizeRoles('BUYER'), async (req, res) => {
   try {
     const { id } = req.params;
     const { amount, quantity = 1 } = req.body;
@@ -1143,23 +1297,108 @@ router.post('/sessions/:id/bid', authenticateToken, authorizeRoles(['BUYER']), a
       });
     }
 
-    // Get current highest bid
-    const highestBid = await prisma.bid.findFirst({
-      where: { sessionId: id },
-      orderBy: { amount: 'desc' }
+    // Find the currently LIVE produce for this session
+    let activeProduce = await prisma.produce.findFirst({
+      where: {
+        sessionId: id,
+        status: 'LIVE'
+      },
+      include: {
+        bids: {
+          orderBy: { amount: 'desc' },
+          take: 1
+        }
+      }
     });
 
-    if (highestBid && amount <= highestBid.amount) {
+    // If no LIVE produce, look for UPCOMING produce to auto-activate
+    if (!activeProduce) {
+      const nextProduce = await prisma.produce.findFirst({
+        where: {
+          sessionId: id,
+          status: 'UPCOMING'
+        },
+        orderBy: { auctionStartTime: 'asc' }
+      });
+
+      if (nextProduce) {
+        // Auto-activate the produce
+        activeProduce = await prisma.produce.update({
+          where: { id: nextProduce.id },
+          data: { status: 'LIVE' },
+          include: {
+            bids: {
+              orderBy: { amount: 'desc' },
+              take: 1
+            }
+          }
+        });
+        console.log(`Auto-activated produce ${activeProduce.id} for session ${id}`);
+      } else {
+        // Fallback: Check for APPROVED booking request to auto-create produce
+        // This handles cases where farmer was approved but didn't list item manually
+        const approvedBooking = await prisma.bookingRequest.findFirst({
+          where: {
+            sessionId: id,
+            status: 'APPROVED',
+            role: 'FARMER'
+          },
+          orderBy: { createdAt: 'asc' }
+        });
+
+        if (approvedBooking) {
+          // Get farmer's APMC for the produce record
+          const farmerId = approvedBooking.userId;
+          const farmer = await prisma.user.findUnique({
+            where: { id: farmerId },
+            select: { apmcId: true }
+          });
+
+          // Create new Produce from Booking Request
+          activeProduce = await prisma.produce.create({
+            data: {
+              title: approvedBooking.productName || 'Fresh Produce',
+              description: approvedBooking.message || 'Auto-generated from booking request',
+              category: 'GENERAL',
+              quantity: parseFloat(approvedBooking.quantity) || 100,
+              unit: 'kg',
+              basePrice: 1000, // Default base price
+              farmerId: farmerId,
+              apmcId: farmer?.apmcId,
+              sessionId: id,
+              auctionStartTime: new Date(),
+              auctionEndTime: new Date(Date.now() + 60 * 60000), // 1 hour duration
+              status: 'LIVE'
+            },
+            include: {
+              bids: true // Empty initially
+            }
+          });
+          console.log(`Auto-created produce ${activeProduce.id} from booking ${approvedBooking.id}`);
+        }
+      }
+    }
+
+    if (!activeProduce) {
       return res.status(400).json({
         success: false,
-        message: 'Bid must be higher than current highest bid'
+        message: 'No active or upcoming produce found for bidding in this session'
       });
     }
 
-    // Create the bid
+    const currentHighestBid = activeProduce.bids[0]?.amount || activeProduce.basePrice;
+
+    if (amount <= currentHighestBid) {
+      return res.status(400).json({
+        success: false,
+        message: `Bid must be higher than current highest bid of ₹${currentHighestBid}`
+      });
+    }
+
+    // Create the bid linked to the active produce
     const bid = await prisma.bid.create({
       data: {
-        sessionId: id,
+        produceId: activeProduce.id,
         bidderId: req.user.id,
         amount: parseFloat(amount),
         quantity: parseInt(quantity),
@@ -1176,6 +1415,15 @@ router.post('/sessions/:id/bid', authenticateToken, authorizeRoles(['BUYER']), a
       }
     });
 
+    // Update the produce with the new highest bid
+    await prisma.produce.update({
+      where: { id: activeProduce.id },
+      data: {
+        currentBid: parseFloat(amount),
+        winningBidId: bid.id
+      }
+    });
+
     res.json({
       success: true,
       data: bid
@@ -1185,7 +1433,7 @@ router.post('/sessions/:id/bid', authenticateToken, authorizeRoles(['BUYER']), a
     console.error('Place bid error:', error);
     res.status(500).json({
       success: false,
-      message: 'Failed to place bid'
+      message: 'Failed to place bid: ' + error.message
     });
   }
 });
@@ -1214,6 +1462,7 @@ router.post('/request-spot', authenticateToken, async (req, res) => {
       data: {
         sessionId,
         userId: req.user.id,
+        role: req.user.role, // Required field from schema
         productName: productName || 'Mixed Produce',
         quantity: parseInt(quantity) || 100,
         grade: grade || 'A',
@@ -1235,8 +1484,10 @@ router.post('/request-spot', authenticateToken, async (req, res) => {
   }
 });
 
+
+
 // Clear all booking requests for farmer
-router.delete('/farmer/booking-requests/clear-all', authenticateToken, authorizeRoles(['FARMER']), async (req, res) => {
+router.delete('/farmer/booking-requests/clear-all', authenticateToken, authorizeRoles('FARMER'), async (req, res) => {
   try {
     await prisma.bookingRequest.deleteMany({
       where: {
@@ -1258,7 +1509,7 @@ router.delete('/farmer/booking-requests/clear-all', authenticateToken, authorize
 });
 
 // Delete single booking request
-router.delete('/farmer/booking-requests/:id', authenticateToken, authorizeRoles(['FARMER']), async (req, res) => {
+router.delete('/farmer/booking-requests/:id', authenticateToken, authorizeRoles('FARMER'), async (req, res) => {
   try {
     const { id } = req.params;
 
@@ -1294,32 +1545,75 @@ router.delete('/farmer/booking-requests/:id', authenticateToken, authorizeRoles(
 });
 
 // Admin: Clear all non-live sessions (SCHEDULED, COMPLETED, CANCELLED)
-router.delete('/admin/sessions/clear-non-live', authenticateToken, authorizeRoles(['ADMIN']), async (req, res) => {
+router.delete('/admin/sessions/clear-non-live', authenticateToken, authorizeRoles('ADMIN'), async (req, res) => {
   try {
-    const deletedSessions = await prisma.auctionSession.deleteMany({
+    // 1. Find sessions to satisfy the condition
+    const sessionsToDelete = await prisma.auctionSession.findMany({
       where: {
         status: {
           in: ['SCHEDULED', 'COMPLETED', 'CANCELLED']
         }
-      }
+      },
+      select: { id: true }
     });
+
+    const sessionIds = sessionsToDelete.map(s => s.id);
+
+    if (sessionIds.length === 0) {
+      return res.json({
+        success: true,
+        message: 'No non-live sessions found to clear',
+        count: 0
+      });
+    }
+
+    console.log(`Clearing ${sessionIds.length} sessions:`, sessionIds);
+
+    // 2. Perform manual cascade delete/unlink in a transaction
+    await prisma.$transaction([
+      // Delete dependent BookingRequests
+      prisma.bookingRequest.deleteMany({
+        where: { sessionId: { in: sessionIds } }
+      }),
+      // Delete dependent SpotRegistrations
+      prisma.spotRegistration.deleteMany({
+        where: { sessionId: { in: sessionIds } }
+      }),
+      // Delete dependent ChatMessages
+      prisma.chatMessage.deleteMany({
+        where: { sessionId: { in: sessionIds } }
+      }),
+      // Unlink Produce (set sessionId = null)
+      prisma.produce.updateMany({
+        where: { sessionId: { in: sessionIds } },
+        data: { sessionId: null }
+      }),
+      // Delete dependent EscrowTransactions
+      prisma.escrowTransaction.deleteMany({
+        where: { sessionId: { in: sessionIds } }
+      }),
+      // Finally, delete the Sessions
+      prisma.auctionSession.deleteMany({
+        where: { id: { in: sessionIds } }
+      })
+    ]);
 
     res.json({
       success: true,
-      message: `Cleared ${deletedSessions.count} non-live sessions successfully`,
-      count: deletedSessions.count
+      message: `Cleared ${sessionIds.length} non-live sessions and related data successfully`,
+      count: sessionIds.length
     });
   } catch (error) {
     console.error('Clear non-live sessions error:', error);
     res.status(500).json({
       success: false,
-      message: 'Failed to clear non-live sessions'
+      message: 'Failed to clear non-live sessions: ' + error.message
     });
   }
 });
 
 // Admin: Clear all processed booking requests (APPROVED, REJECTED)
-router.delete('/admin/booking-requests/clear-processed', authenticateToken, authorizeRoles(['ADMIN']), async (req, res) => {
+router.delete('/admin/booking-requests/clear-processed', authenticateToken, authorizeRoles('ADMIN'), async (req, res) => {
   try {
     const deletedRequests = await prisma.bookingRequest.deleteMany({
       where: {
@@ -1340,6 +1634,86 @@ router.delete('/admin/booking-requests/clear-processed', authenticateToken, auth
       success: false,
       message: 'Failed to clear processed booking requests'
     });
+  }
+});
+
+// Track user presence (API based fallback)
+router.post('/sessions/:id/enter', authenticateToken, async (req, res) => {
+  try {
+    const { id } = req.params;
+    // We assume produceId is passed or we find active produce for session
+    // Actually socketService tracks by produceId for auctions. 
+    // If we track session exit, we need session logic. 
+    // But user asked for "bid should end", which is Auction level.
+    // So let's find the active produce for this session.
+
+    const produce = await prisma.produce.findFirst({
+      where: { sessionId: id, status: 'LIVE' }
+    });
+
+    if (produce) {
+      const socketService = req.app.get('socketService');
+      socketService.enterAuction(produce.id, req.user.id);
+    }
+
+    res.json({ success: true });
+  } catch (error) {
+    console.error('Enter session error:', error);
+    res.status(500).json({ success: false });
+  }
+});
+
+router.post('/sessions/:id/exit', authenticateToken, async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    const produce = await prisma.produce.findFirst({
+      where: { sessionId: id, status: 'LIVE' }
+    });
+
+    if (produce) {
+      const socketService = req.app.get('socketService');
+      socketService.leaveAuction(produce.id, req.user.id);
+    }
+
+    res.json({ success: true });
+  } catch (error) {
+    console.error('Exit session error:', error);
+    res.status(500).json({ success: false });
+  }
+});
+
+router.post('/sessions/:id/end', authenticateToken, authorizeRoles('FARMER'), async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    // Find active produce for this session
+    const produce = await prisma.produce.findFirst({
+      where: { sessionId: id, status: 'LIVE' },
+      include: { bids: { orderBy: { amount: 'desc' }, take: 1 } }
+    });
+
+    if (!produce) {
+      return res.status(404).json({ success: false, message: 'No live auction found for this session' });
+    }
+
+    // Verify ownership
+    if (produce.farmerId !== req.user.id) {
+      return res.status(403).json({ success: false, message: 'You are not the owner of this auction' });
+    }
+
+    // Trigger end auction
+    const socketService = req.app.get('socketService');
+    await socketService.endAuction(produce.id);
+
+    res.json({
+      success: true,
+      message: 'Auction ended successfully',
+      winningBid: produce.bids[0] || null
+    });
+  } catch (error) {
+    console.error('End session error:', error);
+    res.status(500).json({ success: false, message: 'Failed to end auction' });
   }
 });
 

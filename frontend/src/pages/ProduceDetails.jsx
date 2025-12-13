@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useParams } from 'react-router-dom';
-import axios from 'axios';
+import api from '../api';
 
 const ProduceDetails = () => {
   const { id } = useParams();
@@ -15,12 +15,10 @@ const ProduceDetails = () => {
 
   const fetchProduceDetails = async () => {
     try {
-      const response = await axios.get(`/api/auctions/${id}`, {
-        headers: { 'Authorization': `Bearer ${localStorage.getItem('token')}` }
-      });
-      
-      if (response.data.success) {
-        const produceData = response.data.data;
+      const response = await api.get(`/auctions/${id}`);
+
+      if (response.success) {
+        const produceData = response.data;
         setProduce({
           ...produceData,
           endTime: new Date(produceData.endTime),
@@ -55,12 +53,9 @@ const ProduceDetails = () => {
     }
 
     try {
-      const response = await axios.post(`/api/auctions/${id}/bid`, 
-        { amount: bid },
-        { headers: { 'Authorization': `Bearer ${localStorage.getItem('token')}` } }
-      );
-      
-      if (response.data.success) {
+      const response = await api.post(`/auctions/${id}/bid`, { amount: bid });
+
+      if (response.success) {
         // Refresh produce details to get updated bids
         await fetchProduceDetails();
         setBidAmount('');
@@ -125,9 +120,8 @@ const ProduceDetails = () => {
                   <button
                     key={index}
                     onClick={() => setSelectedImage(index)}
-                    className={`border-2 rounded-lg overflow-hidden ${
-                      selectedImage === index ? 'border-green-500' : 'border-gray-200'
-                    }`}
+                    className={`border-2 rounded-lg overflow-hidden ${selectedImage === index ? 'border-green-500' : 'border-gray-200'
+                      }`}
                   >
                     <img
                       src={image}
@@ -147,7 +141,7 @@ const ProduceDetails = () => {
                   {produce.status}
                 </span>
               </div>
-              
+
               <div className="flex items-center space-x-4 mb-6">
                 <span className="bg-gray-100 text-gray-800 px-3 py-1 rounded-full text-sm font-medium">
                   {produce.category}
@@ -182,13 +176,13 @@ const ProduceDetails = () => {
                       <div className="relative w-16 h-16 mx-auto mb-2">
                         <svg className="w-16 h-16 transform -rotate-90" viewBox="0 0 100 100">
                           <circle cx="50" cy="50" r="40" stroke="currentColor" strokeWidth="8" fill="none" className="text-gray-200" />
-                          <circle 
-                            cx="50" 
-                            cy="50" 
-                            r="40" 
-                            stroke="currentColor" 
-                            strokeWidth="8" 
-                            fill="none" 
+                          <circle
+                            cx="50"
+                            cy="50"
+                            r="40"
+                            stroke="currentColor"
+                            strokeWidth="8"
+                            fill="none"
                             className="text-green-500"
                             strokeDasharray={`${score * 2.51}, 251`}
                           />
@@ -384,7 +378,7 @@ const ProduceDetails = () => {
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
           <div className="bg-white rounded-xl p-6 max-w-md w-full">
             <h3 className="text-xl font-semibold text-gray-900 mb-4">Place Your Bid</h3>
-            
+
             <div className="mb-4">
               <div className="text-sm text-gray-600 mb-2">Current Highest Bid</div>
               <div className="text-2xl font-bold text-green-600">₹{produce.currentBid.toLocaleString()}</div>

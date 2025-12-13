@@ -8,6 +8,7 @@ const authenticateToken = async (req, res, next) => {
     const token = authHeader && authHeader.split(' ')[1]; // Bearer TOKEN
 
     if (!token) {
+      console.log('❌ Auth Failed: No token provided');
       return res.status(401).json({
         success: false,
         message: 'Access token required'
@@ -15,7 +16,7 @@ const authenticateToken = async (req, res, next) => {
     }
 
     const decoded = jwt.verify(token, config.app.jwt.secret);
-    
+
     // Fetch user from database
     const user = await prisma.user.findUnique({
       where: { id: decoded.userId },
@@ -29,6 +30,7 @@ const authenticateToken = async (req, res, next) => {
     });
 
     if (!user) {
+      console.log(`❌ Auth Failed: User not found for ID ${decoded.userId}`);
       return res.status(401).json({
         success: false,
         message: 'Invalid token - user not found'
@@ -36,6 +38,7 @@ const authenticateToken = async (req, res, next) => {
     }
 
     if (!user.isActive) {
+      console.log(`❌ Auth Failed: User ${user.email} is inactive`);
       return res.status(401).json({
         success: false,
         message: 'Account is deactivated'
@@ -46,18 +49,20 @@ const authenticateToken = async (req, res, next) => {
     next();
   } catch (error) {
     if (error.name === 'JsonWebTokenError') {
+      console.log('❌ Auth Failed: Invalid JWT signature');
       return res.status(401).json({
         success: false,
         message: 'Invalid token'
       });
     }
     if (error.name === 'TokenExpiredError') {
+      console.log('❌ Auth Failed: Token expired');
       return res.status(401).json({
         success: false,
         message: 'Token expired'
       });
     }
-    
+
     console.error('Auth middleware error:', error);
     return res.status(500).json({
       success: false,

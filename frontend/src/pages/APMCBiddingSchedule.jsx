@@ -1,18 +1,19 @@
 import React, { useState, useEffect } from 'react';
-import axios from 'axios';
+import api from '../api';
 import { useAuth } from '../contexts/AuthContext';
 import { connectSocket, getSocket, disconnectSocket } from '../lib/socket';
 import { Calendar, Clock, MapPin, Users, TrendingUp, Plus } from 'lucide-react';
+import { toast } from 'react-hot-toast';
 
 const APMCBiddingSchedule = () => {
-  const { user, token } = useAuth();
+  const { user } = useAuth();
   const [selectedProduct, setSelectedProduct] = useState('');
   const [apmcSchedules, setApmcSchedules] = useState([]);
   const [userBookings, setUserBookings] = useState([]);
   const [bookingStatus, setBookingStatus] = useState({});
   const [timers, setTimers] = useState({});
   const [loading, setLoading] = useState(false);
-  
+
   // Available products for filter dropdown
   const products = [
     'Wheat',
@@ -30,11 +31,11 @@ const APMCBiddingSchedule = () => {
     const interval = setInterval(() => {
       const now = new Date();
       const newTimers = {};
-      
+
       apmcSchedules.forEach(session => {
         const sessionStart = new Date(session.dateTime);
         const timeUntilStart = Math.ceil((sessionStart - now) / (1000 * 60)); // minutes
-        
+
         if (timeUntilStart > 0) {
           if (timeUntilStart > 60) {
             const hours = Math.ceil(timeUntilStart / 60);
@@ -46,7 +47,7 @@ const APMCBiddingSchedule = () => {
           newTimers[session.id] = 'Live';
         }
       });
-      
+
       setTimers(newTimers);
     }, 1000);
 
@@ -83,34 +84,33 @@ const APMCBiddingSchedule = () => {
       const params = {
         // Only filter by category if explicitly chosen
         ...(selectedProduct && { category: selectedProduct }),
-        // Hide already-ended sessions by fetching from now onwards
-        from: new Date().toISOString()
+        // Hide old ended sessions, but keep recent/live ones (fetch from 24h ago)
+        from: new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString()
       };
-      const response = await axios.get('/api/auctions/sessions', { 
-        params
-      });
-      
-      const mapped = (response.data || [])
+
+      const response = await api.get('/auctions/sessions', { params });
+
+      const mapped = (response || [])
         // Show only upcoming or live sessions to farmers
         .filter(s => ['SCHEDULED', 'LIVE'].includes(s.status))
         .map(s => ({
-        id: s.id,
-        name: s.apmc?.name || 'Unknown APMC',
-        location: s.apmc?.location || 'Unknown Location',
-        product: s.category || 'Mixed',
-        date: new Date(s.dateTime).toLocaleDateString(),
-        time: new Date(s.dateTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-        dateTime: s.dateTime,
-        status: s.status.toLowerCase(),
-        duration: s.duration || 60,
-        // backend returns _count.registrations; transformed as number in 'participants'
-        registeredFarmers: typeof s.participants === 'number' ? s.participants : (s.participants?.length || 0),
-        registeredBuyers: 0,
-        lastHighestBid: '2500',
-        avgPrice: '2300',
-        mentor: 'APMC Officer',
-        spotPrice: 50
-      }));
+          id: s.id,
+          name: s.apmc?.name || 'Unknown APMC',
+          location: s.apmc?.location || 'Unknown Location',
+          product: s.category || 'Mixed',
+          date: new Date(s.dateTime).toLocaleDateString(),
+          time: new Date(s.dateTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+          dateTime: s.dateTime,
+          status: s.status.toLowerCase(),
+          duration: s.duration || 60,
+          // backend returns _count.registrations; transformed as number in 'participants'
+          registeredFarmers: typeof s.participants === 'number' ? s.participants : (s.participants?.length || 0),
+          registeredBuyers: 0,
+          lastHighestBid: '2500',
+          avgPrice: '2300',
+          mentor: 'APMC Officer',
+          spotPrice: 50
+        }));
       setApmcSchedules(mapped);
     } catch (error) {
       console.error('Error fetching sessions:', error);
@@ -120,14 +120,12 @@ const APMCBiddingSchedule = () => {
 
   const fetchUserBookings = async () => {
     try {
-      const response = await axios.get('/api/auctions/farmer/booking-requests', {
-        headers: { Authorization: `Bearer ${token}` }
-      });
-      setUserBookings(response.data.data || []);
-      
+      const response = await api.get('/auctions/my-booking-requests');
+      setUserBookings(response || []);
+
       // Create a map of session ID to booking status
       const statusMap = {};
-      (response.data.data || []).forEach(booking => {
+      (response || []).forEach(booking => {
         statusMap[booking.sessionId] = booking.status;
       });
       setBookingStatus(statusMap);
@@ -139,20 +137,18 @@ const APMCBiddingSchedule = () => {
   const requestSpot = async (sessionId) => {
     try {
       setLoading(true);
-      await axios.post('/api/auctions/request-spot', {
+      await api.post('/auctions/request-spot', {
         sessionId,
-        productName: selectedProduct || 'Mixed Produce',
-        quantity: 100,
-        grade: 'A'
-      }, {
-        headers: { Authorization: `Bearer ${token}` }
+        productName: selectedProduct, // Pass selected product if available
+        quantity: 100 // Default quantity
       });
-      
-      alert('Spot requested successfully!');
-      fetchUserBookings(); // Refresh booking status
+
+      toast.success('Spot requested successfully!');
+      // Refresh booking status immediately to update UI
+      fetchUserBookings();
     } catch (error) {
       console.error('Failed to request spot:', error);
-      alert('Failed to request spot. Please try again.');
+      toast.error('Failed to request spot. Please try again.');
     } finally {
       setLoading(false);
     }
@@ -179,7 +175,7 @@ const APMCBiddingSchedule = () => {
       return { text: 'Request Rejected', color: 'bg-red-500', disabled: true };
     } else {
       // No booking yet
-      if (session.status === 'scheduled') {
+      if (['scheduled', 'live'].includes(session.status)) {
         return { text: 'Request Spot', color: 'bg-green-600', disabled: false, action: 'request' };
       } else {
         return { text: 'Session Unavailable', color: 'bg-gray-500', disabled: true };
@@ -200,7 +196,7 @@ const APMCBiddingSchedule = () => {
     window.open(`/bid-history/${apmcId}`, '_blank');
   };
 
-  const filteredSchedules = selectedProduct 
+  const filteredSchedules = selectedProduct
     ? apmcSchedules.filter(schedule => schedule.product.toLowerCase() === selectedProduct.toLowerCase())
     : apmcSchedules;
 
@@ -241,7 +237,7 @@ const APMCBiddingSchedule = () => {
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
           {filteredSchedules.map(schedule => {
             const buttonConfig = getSessionButtonConfig(schedule);
-            
+
             return (
               <div key={schedule.id} className="bg-white rounded-lg shadow-lg border border-gray-200 overflow-hidden">
                 {/* Header */}
@@ -322,9 +318,8 @@ const APMCBiddingSchedule = () => {
                       <button
                         onClick={() => handleSessionAction(schedule, buttonConfig.action)}
                         disabled={buttonConfig.disabled || loading}
-                        className={`flex-1 text-white px-4 py-2 rounded-lg font-medium transition-colors ${buttonConfig.color} ${
-                          buttonConfig.disabled ? 'opacity-50 cursor-not-allowed' : 'hover:opacity-90'
-                        }`}
+                        className={`flex-1 text-white px-4 py-2 rounded-lg font-medium transition-colors ${buttonConfig.color} ${buttonConfig.disabled ? 'opacity-50 cursor-not-allowed' : 'hover:opacity-90'
+                          }`}
                       >
                         {buttonConfig.text}
                       </button>
