@@ -47,7 +47,10 @@ router.put('/profile', authenticateToken, async (req, res) => {
       phone,
       address,
       profileImage,
-      notificationPreferences
+      notificationPreferences,
+      bio,
+      companyName,
+      gstNumber
     } = req.body;
 
     // Check if email is already taken by another user
@@ -72,7 +75,10 @@ router.put('/profile', authenticateToken, async (req, res) => {
         ...(phone && { phone }),
         ...(address && { address }),
         ...(profileImage && { profileImage }),
-        ...(notificationPreferences && { notificationPreferences })
+        ...(notificationPreferences && { notificationPreferences }),
+        ...(bio && { bio }),
+        ...(companyName && { companyName }),
+        ...(gstNumber && { gstNumber })
       },
       include: {
         apmc: { select: { name: true, location: true } },
@@ -191,6 +197,42 @@ router.get('/dashboard-stats', authenticateToken, async (req, res) => {
         activeBids,
         totalSpent: totalSpent._sum.amount || 0,
         pendingOrders
+      };
+
+    } else if (req.user.role === 'ADMIN') {
+      // Admin dashboard stats
+      const [
+        totalSessions,
+        completedSessions,
+        cancelledSessions,
+        highestBidRecord
+      ] = await Promise.all([
+        prisma.auctionSession.count({ where: { createdBy: req.user.id } }),
+        prisma.auctionSession.count({ where: { createdBy: req.user.id, status: 'COMPLETED' } }),
+        prisma.auctionSession.count({ where: { createdBy: req.user.id, status: 'CANCELLED' } }),
+        prisma.bid.findFirst({
+          where: {
+            status: 'WON',
+            produce: {
+              session: {
+                createdBy: req.user.id
+              }
+            }
+          },
+          orderBy: {
+            amount: 'desc'
+          },
+          select: {
+            amount: true
+          }
+        })
+      ]);
+
+      stats = {
+        totalSessions,
+        completedSessions,
+        cancelledSessions,
+        highestBid: highestBidRecord?.amount || 0
       };
     }
 
@@ -419,7 +461,7 @@ router.get('/statistics', authenticateToken, authorizeRoles('ADMIN'), async (req
   try {
     // Get total user count
     const totalUsers = await prisma.user.count();
-    
+
     // Get user count by role
     const usersByRole = await prisma.user.groupBy({
       by: ['role'],
@@ -427,20 +469,20 @@ router.get('/statistics', authenticateToken, authorizeRoles('ADMIN'), async (req
         role: true
       }
     });
-    
+
     // Get active vs inactive users
     const activeUsers = await prisma.user.count({
       where: { isActive: true }
     });
-    
+
     const inactiveUsers = await prisma.user.count({
       where: { isActive: false }
     });
-    
+
     // Get recent registrations (last 30 days)
     const thirtyDaysAgo = new Date();
     thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
-    
+
     const recentRegistrations = await prisma.user.count({
       where: {
         createdAt: {
@@ -448,7 +490,7 @@ router.get('/statistics', authenticateToken, authorizeRoles('ADMIN'), async (req
         }
       }
     });
-    
+
     // Get registrations by APMC
     const usersByApmc = await prisma.user.groupBy({
       by: ['apmcId'],
@@ -461,7 +503,7 @@ router.get('/statistics', authenticateToken, authorizeRoles('ADMIN'), async (req
         }
       }
     });
-    
+
     // Get APMC names for the grouped data
     const apmcIds = usersByApmc.map(item => item.apmcId).filter(Boolean);
     const apmcs = await prisma.aPMC.findMany({
@@ -476,7 +518,7 @@ router.get('/statistics', authenticateToken, authorizeRoles('ADMIN'), async (req
         location: true
       }
     });
-    
+
     // Map APMC data with user counts
     const usersByApmcWithNames = usersByApmc.map(item => {
       const apmc = apmcs.find(a => a.id === item.apmcId);
@@ -486,18 +528,18 @@ router.get('/statistics', authenticateToken, authorizeRoles('ADMIN'), async (req
         userCount: item._count.apmcId
       };
     });
-    
+
     // Format role data
     const roleStats = {
       FARMER: 0,
       BUYER: 0,
       ADMIN: 0
     };
-    
+
     usersByRole.forEach(item => {
       roleStats[item.role] = item._count.role;
     });
-    
+
     const statistics = {
       totalUsers,
       activeUsers,
@@ -506,12 +548,12 @@ router.get('/statistics', authenticateToken, authorizeRoles('ADMIN'), async (req
       usersByRole: roleStats,
       usersByApmc: usersByApmcWithNames
     };
-    
+
     res.json({
       success: true,
       data: statistics
     });
-    
+
   } catch (error) {
     console.error('Get user statistics error:', error);
     res.status(500).json({

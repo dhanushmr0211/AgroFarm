@@ -8,7 +8,7 @@ class NotificationService {
       try {
         // Use service account key file for Firebase initialization
         const serviceAccount = require('../config/firebase/firebase-key.json');
-        
+
         if (process.env.NODE_ENV !== 'development') {
           admin.initializeApp({
             credential: admin.credential.cert(serviceAccount),
@@ -26,18 +26,17 @@ class NotificationService {
         console.log('📝 Push notifications will be disabled');
       }
     }
-    
-    // Initialize Firestore collection references
-    this.collections = {
-      users: process.env.FIRESTORE_USERS_COLLECTION || 'users',
-      notifications: process.env.FIRESTORE_NOTIFICATIONS_COLLECTION || 'notifications',
-      auctions: process.env.FIRESTORE_AUCTIONS_COLLECTION || 'auctions',
-      bids: process.env.FIRESTORE_BIDS_COLLECTION || 'bids',
-      sessions: process.env.FIRESTORE_SESSIONS_COLLECTION || 'auction_sessions',
-      apmcs: process.env.FIRESTORE_APMC_COLLECTION || 'apmcs'
-    };
-    
-    console.log('📚 Firestore Collections:', this.collections);
+
+    // Store FCM configuration
+    this.fcmServerKey = process.env.FCM_SERVER_KEY;
+    this.fcmSenderId = process.env.FCM_SENDER_ID;
+
+    if (this.fcmServerKey && this.fcmSenderId) {
+      console.log('✅ FCM credentials configured');
+      console.log(`📱 FCM Sender ID: ${this.fcmSenderId}`);
+    } else {
+      console.log('⚠️ FCM credentials not configured. Push notifications may be limited.');
+    }
   }
 
   // Save device token
@@ -116,7 +115,7 @@ class NotificationService {
         };
 
         const response = await admin.messaging().sendMulticast(message);
-        
+
         // Remove invalid tokens
         const failedTokens = [];
         response.responses.forEach((resp, idx) => {
@@ -134,7 +133,7 @@ class NotificationService {
         }
 
         console.log(`📨 Push notification sent to user ${userId}: ${response.successCount}/${tokens.length} successful`);
-        
+
         return {
           success: true,
           successCount: response.successCount,
@@ -326,7 +325,7 @@ class NotificationService {
   async getUserNotifications(options) {
     try {
       const { userId, page = 1, limit = 20, unreadOnly = false } = options;
-      
+
       const whereClause = { userId };
       if (unreadOnly) {
         whereClause.isRead = false;
@@ -422,11 +421,11 @@ class NotificationService {
       console.log(`📁 [DEV MODE] Mock Firestore save for user ${userId}:`, notification.title);
       return;
     }
-    
+
     try {
       const db = admin.firestore();
       const notificationRef = db.collection(this.collections.notifications).doc();
-      
+
       await notificationRef.set({
         userId: userId,
         title: notification.title,
@@ -437,7 +436,7 @@ class NotificationService {
         createdAt: admin.firestore.FieldValue.serverTimestamp(),
         projectId: process.env.FIREBASE_PROJECT_ID
       });
-      
+
       console.log(`📁 Notification saved to Firestore: ${notificationRef.id}`);
     } catch (error) {
       console.error('Firestore save error:', error);
@@ -452,7 +451,7 @@ class NotificationService {
         where: { token: { in: tokens } },
         data: { isActive: false }
       });
-      
+
       console.log(`🗑️ Removed ${tokens.length} invalid FCM tokens`);
     } catch (error) {
       console.error('Remove invalid tokens error:', error);

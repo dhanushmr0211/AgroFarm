@@ -104,22 +104,15 @@ const Wallet = () => {
         }
       };
 
-      // CHECK FOR MOCK ORDER (Dev/Test Mode)
-      if (order.id && order.id.startsWith('order_mock_')) {
-        console.log('⚠️ Mock Order detected. Bypassing Razorpay SDK.');
-        const mockResponse = {
-          razorpay_order_id: order.id,
-          razorpay_payment_id: `pay_mock_${Date.now()}`,
-          razorpay_signature: 'mock_signature_bypass'
-        };
-        // Simulate slight delay for realism
-        setTimeout(() => handlePaymentVerification(mockResponse), 1000);
+      // Razorpay checkout options
+      const razorpayKey = import.meta.env.VITE_RAZORPAY_KEY_ID;
+      if (!razorpayKey) {
+        alert('Configuration Error: VITE_RAZORPAY_KEY_ID is missing in frontend .env');
         return;
       }
 
-      // Razorpay checkout options
       const options = {
-        key: 'rzp_test_RD9NppJFgIFzff', // Your Razorpay key ID
+        key: razorpayKey,
         amount: order.amount,
         currency: order.currency,
         name: 'Farmer Bidding Platform',
@@ -359,24 +352,31 @@ const Wallet = () => {
                   </p>
                 </div>
                 <div className="space-y-4">
-                  {escrowTransactions.map((escrow) => (
-                    <div key={escrow.id} className="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
-                      <div className="flex items-center justify-between">
-                        <div>
-                          <h4 className="font-medium text-gray-900">{escrow.description}</h4>
-                          <p className="text-sm text-gray-600">Farmer: {escrow.farmer}</p>
-                          <p className="text-sm text-gray-600">Escrowed on: {escrow.date}</p>
-                          <p className="text-sm text-gray-600">Expected release: {escrow.expectedRelease}</p>
-                        </div>
-                        <div className="text-right">
-                          <p className="text-xl font-bold text-yellow-600">₹{escrow.amount.toLocaleString()}</p>
-                          <button className="mt-2 text-sm text-blue-600 hover:text-blue-800">
-                            Track Status
-                          </button>
+                  {escrowTransactions.length === 0 ? (
+                    <div className="text-center py-8 border-2 border-dashed border-gray-200 rounded-lg">
+                      <Clock className="mx-auto h-12 w-12 text-gray-300 mb-3" />
+                      <p className="text-gray-500 font-medium">No active escrow transactions</p>
+                      <p className="text-sm text-gray-400">Funds held during active auctions will appear here</p>
+                    </div>
+                  ) : (
+                    escrowTransactions.map((escrow) => (
+                      <div key={escrow.id} className="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
+                        <div className="flex items-center justify-between">
+                          <div>
+                            <h4 className="font-medium text-gray-900">{escrow.description || `Escrow #${escrow.id.slice(-6)}`}</h4>
+                            <p className="text-sm text-gray-600">Status: <span className="font-semibold capitalize">{escrow.status}</span></p>
+                            <p className="text-sm text-gray-600">Created: {new Date(escrow.createdAt).toLocaleDateString()}</p>
+                          </div>
+                          <div className="text-right">
+                            <p className="text-xl font-bold text-yellow-600">₹{escrow.amount.toLocaleString()}</p>
+                            <button className="mt-2 text-sm text-blue-600 hover:text-blue-800">
+                              View Details
+                            </button>
+                          </div>
                         </div>
                       </div>
-                    </div>
-                  ))}
+                    ))
+                  )}
                 </div>
               </div>
             )}

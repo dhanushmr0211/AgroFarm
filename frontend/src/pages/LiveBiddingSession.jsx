@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { useParams } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import api from '../api';
+import { io } from 'socket.io-client';
 import {
   Clock,
   Users,
@@ -24,13 +25,41 @@ const LiveBidding = () => {
   const [loading, setLoading] = useState(true);
   const [bidding, setBidding] = useState(false);
   const [message, setMessage] = useState('');
+  const [chatMessages, setChatMessages] = useState([]);
+  const [socket, setSocket] = useState(null);
   const intervalRef = useRef();
 
   useEffect(() => {
     fetchSessionDetails();
+    fetchBidHistory();
+    fetchParticipants();
+    fetchChatHistory();
+
+    // Initialize Socket connection
+    const newSocket = io(import.meta.env.VITE_API_URL || 'http://10.60.208.200:5001', {
+      auth: { token: localStorage.getItem('token') }
+    });
+
+    newSocket.on('connect', () => {
+      console.log('Connected to socket server');
+      newSocket.emit('join_session', { sessionId });
+    });
+
+    newSocket.on('session_joined', (data) => {
+      console.log('Joined session room:', data);
+    });
+
+    newSocket.on('new_message', (msg) => {
+      setChatMessages(prev => [...prev, msg]);
+    });
+
+    setSocket(newSocket);
+
+    // Polling fallback
     startRealTimeUpdates();
 
     return () => {
+      newSocket.disconnect();
       if (intervalRef.current) {
         clearInterval(intervalRef.current);
       }
@@ -88,14 +117,28 @@ const LiveBidding = () => {
     }
   };
 
+  // ... inside LiveBidding component ...
+
+  const fetchChatHistory = async () => {
+    try {
+      const response = await api.get(`/auctions/sessions/${sessionId}/messages`);
+      if (response.success && response.data) {
+        setChatMessages(response.data);
+      }
+    } catch (error) {
+      console.error('Failed to fetch chat history:', error);
+    }
+  };
+
   const startRealTimeUpdates = () => {
     intervalRef.current = setInterval(() => {
+      // Chat is handled by socket, only poll critical data
       fetchBidHistory();
       fetchParticipants();
       if (session) {
         calculateTimeRemaining(session);
       }
-    }, 2000); // Update every 2 seconds
+    }, 5000); // Reduced polling frequency
   };
 
   // Farmer Produce Form State
@@ -558,6 +601,43 @@ const LiveBidding = () => {
                     </div>
                   </div>
                 ))}
+              </div>
+            </div>
+
+            {/* Live Chat */}
+            <div className="bg-white rounded-lg shadow-md p-6 flex flex-col h-96">
+              <h3 className="text-lg font-semibold text-gray-900 mb-4">Live Chat</h3>
+              <div className="flex-1 overflow-y-auto space-y-3 mb-4 pr-2">
+                {chatMessages.map((msg, idx) => (
+                  <div key={idx} className={`p-2 rounded-lg text-sm ${msg.userId === user?.id ? 'bg-blue-100 ml-8' : 'bg-gray-100 mr-8'}`}>
+                    <div className="font-bold text-xs mb-1 text-gray-600">{msg.user?.name || 'User'}</div>
+                    <div>{msg.message}</div>
+                  </div>
+                ))}
+              </div>
+              <div className="flex">
+                <input
+                  type="text"
+                  value={message}
+                  onChange={(e) => setMessage(e.target.value)}
+                  placeholder="Type a message..."
+                  className="flex-1 px-3 py-2 border rounded-l-md focus:outline-none focus:ring-1 focus:ring-blue-500"
+                  onKeyPress={(e) => e.key === 'Enter' && !!message.trim() && socket && (
+                    socket.emit('send_message', { sessionId, message }),
+                    setMessage('')
+                  )}
+                />
+                <button
+                  onClick={() => {
+                    if (socket && message.trim()) {
+                      socket.emit('send_message', { sessionId, message });
+                      setMessage('');
+                    }
+                  }}
+                  className="bg-blue-600 text-white px-4 py-2 rounded-r-md hover:bg-blue-700"
+                >
+                  Send
+                </button>
               </div>
             </div>
           </div>

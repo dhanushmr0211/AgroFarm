@@ -10,7 +10,7 @@ const Login = () => {
   })
   const [showPassword, setShowPassword] = useState(false)
   const [loading, setLoading] = useState(false)
-  
+
   const { login, isAuthenticated, user } = useAuth()
   const navigate = useNavigate()
 
@@ -31,14 +31,14 @@ const Login = () => {
   const handleSubmit = async (e) => {
     e.preventDefault()
     setLoading(true)
-    
+
     const result = await login(formData.email, formData.password)
-    
+
     if (result.success) {
       const dashboardPath = user?.role === 'FARMER' ? '/farmer/dashboard' : '/buyer/dashboard'
       navigate(dashboardPath)
     }
-    
+
     setLoading(false)
   }
 
@@ -125,25 +125,6 @@ const Login = () => {
               )}
             </button>
           </form>
-
-          {/* Demo Accounts */}
-          <div className="mt-6 pt-6 border-t border-gray-200">
-            <h3 className="text-sm font-medium text-gray-700 mb-3">Demo Accounts:</h3>
-            <div className="space-y-2 text-xs text-gray-600">
-              <div className="flex justify-between">
-                <span>Farmer:</span>
-                <span>farmer1@example.com / farmer123</span>
-              </div>
-              <div className="flex justify-between">
-                <span>Buyer:</span>
-                <span>buyer1@example.com / buyer123</span>
-              </div>
-              <div className="flex justify-between">
-                <span>Admin:</span>
-                <span>admin@farmerbidding.com / admin123</span>
-              </div>
-            </div>
-          </div>
 
           {/* Register Link */}
           <div className="mt-6 text-center">

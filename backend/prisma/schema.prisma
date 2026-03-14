@@ -22,6 +22,9 @@ model User {
   isActive                Boolean  @default(true)
   apmcId                  String?
   notificationPreferences String?  @default("{\"bidUpdates\": true, \"auctionStart\": true, \"auctionEnd\": true, \"paymentUpdates\": true, \"orderUpdates\": true, \"marketing\": false}")
+  bio                     String?
+  companyName             String?
+  gstNumber               String?
   createdAt               DateTime @default(now())
   updatedAt               DateTime @updatedAt
 

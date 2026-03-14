@@ -85,16 +85,18 @@ const Navbar = () => {
                   </Link>
                 )}
 
-                <Link
-                  to="/wallet"
-                  className={`flex items-center space-x-1.5 px-3 py-1.5 rounded-full transition-all ${isActivePath('/wallet')
-                    ? 'bg-primary-50 text-primary-700 font-medium'
-                    : 'text-earth-600 hover:bg-earth-50'
-                    }`}
-                >
-                  <Wallet size={16} />
-                  <span className="text-sm">Wallet</span>
-                </Link>
+                {user?.role !== 'ADMIN' && (
+                  <Link
+                    to="/wallet"
+                    className={`flex items-center space-x-1.5 px-3 py-1.5 rounded-full transition-all ${isActivePath('/wallet')
+                      ? 'bg-primary-50 text-primary-700 font-medium'
+                      : 'text-earth-600 hover:bg-earth-50'
+                      }`}
+                  >
+                    <Wallet size={16} />
+                    <span className="text-sm">Wallet</span>
+                  </Link>
+                )}
 
                 {/* User Menu */}
                 <div className="relative">
@@ -215,13 +217,15 @@ const Navbar = () => {
                       APMC Schedule
                     </Link>
                   )}
-                  <Link
-                    to="/wallet"
-                    className="block px-3 py-2 text-base font-medium text-earth-600 hover:text-primary-600 hover:bg-primary-50 rounded-lg transition-colors"
-                    onClick={() => setIsMobileMenuOpen(false)}
-                  >
-                    Wallet
-                  </Link>
+                  {user?.role !== 'ADMIN' && (
+                    <Link
+                      to="/wallet"
+                      className="block px-3 py-2 text-base font-medium text-earth-600 hover:text-primary-600 hover:bg-primary-50 rounded-lg transition-colors"
+                      onClick={() => setIsMobileMenuOpen(false)}
+                    >
+                      Wallet
+                    </Link>
+                  )}
                   <Link
                     to="/profile"
                     className="block px-3 py-2 text-base font-medium text-earth-600 hover:text-primary-600 hover:bg-primary-50 rounded-lg transition-colors"

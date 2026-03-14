@@ -4,6 +4,7 @@ import { useAuth } from '../../contexts/AuthContext'
 import { Plus, Package, DollarSign, Clock, TrendingUp, MapPin, X, Trash2, Star, Calendar, Users, Bell, CheckCircle, AlertCircle } from 'lucide-react'
 import api from '../../api'
 import toast from 'react-hot-toast'
+import ImageUpload from '../../components/ImageUpload'
 
 
 const FarmerDashboard = () => {
@@ -24,6 +25,7 @@ const FarmerDashboard = () => {
   const [loading, setLoading] = useState(false)
   const [apmcs, setApmcs] = useState([])
   const [myProduce, setMyProduce] = useState([])
+  const [uploadedImages, setUploadedImages] = useState([])
   const [stats, setStats] = useState({
     activeListings: 0,
     liveAuctions: 0,
@@ -37,6 +39,8 @@ const FarmerDashboard = () => {
   const [loadingNotifications, setLoadingNotifications] = useState(false)
   const [bookingRequests, setBookingRequests] = useState([])
   const [loadingBookings, setLoadingBookings] = useState(false)
+  const [sessions, setSessions] = useState([])
+  const [loadingSessions, setLoadingSessions] = useState(false)
 
   useEffect(() => {
     fetchAPMCs()
@@ -44,15 +48,37 @@ const FarmerDashboard = () => {
     fetchStats()
     fetchNotifications()
     fetchBookingRequests()
+    fetchSessions()
 
     // Auto-refresh notifications every 30 seconds
     const interval = setInterval(() => {
+      fetchSessions() // Also refresh sessions to see new ones
       fetchNotifications()
       fetchBookingRequests()
     }, 30000)
 
     return () => clearInterval(interval)
   }, [])
+
+  const fetchSessions = async () => {
+    try {
+      setLoadingSessions(true)
+      const response = await api.get('/sessions')
+      if (response.success && response.data) {
+        // Filter only SCHEDULED sessions that haven't started yet
+        const upcomingSessions = response.data.filter(s =>
+          (s.status === 'SCHEDULED' || s.status === 'LIVE') &&
+          new Date(s.endTime) > new Date()
+        ).sort((a, b) => new Date(a.startTime) - new Date(b.startTime))
+
+        setSessions(upcomingSessions)
+      }
+    } catch (error) {
+      console.error('Failed to fetch sessions:', error)
+    } finally {
+      setLoadingSessions(false)
+    }
+  }
 
   const fetchAPMCs = async () => {
     try {
@@ -112,6 +138,7 @@ const FarmerDashboard = () => {
         grade: newProduce.quality,
         pickupLocation: newProduce.location,
         apmcId: newProduce.apmcId,
+        images: JSON.stringify(uploadedImages), // Add uploaded images
         auctionStartTime: new Date(Date.now() + 60 * 60 * 1000).toISOString(), // 1 hour from now
         auctionEndTime: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString() // 24 hours from now
       }
@@ -130,6 +157,7 @@ const FarmerDashboard = () => {
           location: '',
           apmcId: ''
         })
+        setUploadedImages([]) // Clear uploaded images
         fetchMyProduce() // Refresh the list
         fetchStats() // Refresh stats
       }
@@ -139,6 +167,12 @@ const FarmerDashboard = () => {
     } finally {
       setLoading(false)
     }
+  }
+
+  // Handler for image uploads
+  const handleImagesUploaded = (imageUrls) => {
+    setUploadedImages(imageUrls)
+    toast.success(`${imageUrls.length} image(s) uploaded successfully!`)
   }
 
   const getCategoryFromName = (name) => {
@@ -416,6 +450,70 @@ const FarmerDashboard = () => {
           <div className="p-6">
             {activeTab === 'overview' && (
               <div>
+                {/* Upcoming Sessions Section */}
+                <div className="mb-10">
+                  <div className="flex justify-between items-center mb-6">
+                    <h2 className="text-xl font-semibold text-gray-900 flex items-center">
+                      <Calendar className="mr-2 text-blue-600" size={24} />
+                      Upcoming Auctions
+                    </h2>
+                    <button
+                      onClick={() => navigate('/apmc-schedule')}
+                      className="text-blue-600 hover:text-blue-800 font-medium text-sm flex items-center"
+                    >
+                      View Full Schedule <CheckCircle className="ml-1 w-4 h-4" />
+                    </button>
+                  </div>
+
+                  {loadingSessions ? (
+                    <div className="text-center py-8">
+                      <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto"></div>
+                      <p className="text-gray-500 mt-2">Loading upcoming auctions...</p>
+                    </div>
+                  ) : sessions.length === 0 ? (
+                    <div className="bg-blue-50 border border-blue-100 rounded-lg p-6 text-center">
+                      <p className="text-blue-600">No upcoming auctions scheduled at the moment.</p>
+                    </div>
+                  ) : (
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                      {sessions.slice(0, 3).map(session => (
+                        <div key={session.id} className="bg-white border border-gray-200 rounded-xl p-5 shadow-sm hover:shadow-md transition-shadow relative overflow-hidden group">
+                          {session.status === 'LIVE' && (
+                            <div className="absolute top-0 right-0 bg-green-500 text-white text-xs font-bold px-3 py-1 rounded-bl">
+                              LIVE
+                            </div>
+                          )}
+
+                          <h3 className="font-bold text-gray-900 text-lg mb-1">{session.apmc?.name}</h3>
+                          <p className="text-sm text-gray-500 mb-3 flex items-center">
+                            <MapPin size={14} className="mr-1" /> {session.apmc?.location}
+                          </p>
+
+                          <div className="space-y-2 mb-4">
+                            <div className="flex justify-between text-sm">
+                              <span className="text-gray-500">Category</span>
+                              <span className="font-medium text-gray-900">{session.category}</span>
+                            </div>
+                            <div className="flex justify-between text-sm">
+                              <span className="text-gray-500">Starts</span>
+                              <span className="font-medium text-blue-600">
+                                {new Date(session.startTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                              </span>
+                            </div>
+                          </div>
+
+                          <button
+                            onClick={() => navigate('/apmc-schedule')}
+                            className="w-full bg-blue-50 text-blue-700 py-2 rounded-lg font-medium hover:bg-blue-100 transition-colors group-hover:bg-blue-600 group-hover:text-white"
+                          >
+                            View Details
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+
                 <div className="flex justify-between items-center mb-6">
                   <h2 className="text-xl font-semibold text-gray-900">Recent Activity</h2>
                   <button
@@ -951,6 +1049,22 @@ const FarmerDashboard = () => {
                     rows={3}
                     placeholder="Additional details about your produce..."
                   />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Product Images (Optional)
+                  </label>
+                  <ImageUpload
+                    onImagesUploaded={handleImagesUploaded}
+                    maxImages={5}
+                    uploadType="produce"
+                  />
+                  {uploadedImages.length > 0 && (
+                    <div className="mt-2 text-sm text-green-600">
+                      ✓ {uploadedImages.length} image(s) uploaded
+                    </div>
+                  )}
                 </div>
 
                 <div className="flex space-x-3 pt-4">

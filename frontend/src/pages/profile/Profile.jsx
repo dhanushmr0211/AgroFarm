@@ -1,6 +1,7 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import api from '../../api';
 import { toast } from 'react-hot-toast';
+import { Camera, Eye, Trash2, X } from 'lucide-react';
 
 const Profile = () => {
   const [activeTab, setActiveTab] = useState('personal');
@@ -53,14 +54,89 @@ const Profile = () => {
     totalTransactions: 0,
     successRate: '0%',
     memberSince: '',
-    rating: '0⭐'
+    rating: '0⭐',
+    // Admin-specific stats
+    totalSessions: 0,
+    completedSessions: 0,
+    cancelledSessions: 0,
+    highestBid: '₹0'
   });
 
   const [transactions, setTransactions] = useState([]);
+  const fileInputRef = useRef(null);
+  const [showImageModal, setShowImageModal] = useState(false);
 
   useEffect(() => {
     fetchProfileData();
   }, []);
+
+  const handleProfilePictureUpload = async (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    // Validate file type
+    if (!file.type.startsWith('image/')) {
+      toast.error('Please select an image file');
+      return;
+    }
+
+    // Validate file size (max 5MB)
+    if (file.size > 5 * 1024 * 1024) {
+      toast.error('Image size should be less than 5MB');
+      return;
+    }
+
+    try {
+      const formData = new FormData();
+      formData.append('image', file);
+
+      toast.loading('Uploading profile picture...');
+
+      const response = await api.post('/upload/profile', formData, {
+        headers: {
+          'Content-Type': 'multipart/form-data'
+        }
+      });
+
+      toast.dismiss();
+
+      if (response.success && response.data?.url) {
+        // Update local state
+        setFormData(prev => ({ ...prev, profilePicture: response.data.url }));
+
+        // Update profile in database
+        await api.put('/users/profile', { profileImage: response.data.url });
+
+        toast.success('Profile picture updated successfully!');
+      } else {
+        toast.error('Failed to upload profile picture');
+      }
+    } catch (error) {
+      toast.dismiss();
+      console.error('Profile picture upload error:', error);
+      toast.error(error.response?.data?.message || 'Failed to upload profile picture');
+    }
+  };
+
+  const handleRemoveProfilePicture = async () => {
+    if (!formData.profilePicture) {
+      toast.error('No profile picture to remove');
+      return;
+    }
+
+    try {
+      // Update profile in database to remove image
+      await api.put('/users/profile', { profileImage: null });
+
+      // Update local state
+      setFormData(prev => ({ ...prev, profilePicture: null }));
+
+      toast.success('Profile picture removed successfully!');
+    } catch (error) {
+      console.error('Remove profile picture error:', error);
+      toast.error('Failed to remove profile picture');
+    }
+  };
 
   const fetchProfileData = async () => {
     try {
@@ -90,7 +166,10 @@ const Profile = () => {
           location: user.apmc?.location || 'Unknown',
           dateJoined: new Date(user.createdAt).getFullYear().toString(),
           profilePicture: user.profileImage,
-          // Other fields might need DB schema updates to be real, keeping defaults or previous values if not in DB
+          bio: user.bio || '',
+          company: user.companyName || '',
+          gstNumber: user.gstNumber || '',
+          address: addr
         }));
 
         // Update member since stat
@@ -108,21 +187,36 @@ const Profile = () => {
         let total = 0;
         let success = 0;
 
-        if (s.totalBids !== undefined) {
-          total = s.totalBids;
-          success = s.wonBids;
-        } else if (s.totalAuctions !== undefined) {
-          total = s.totalAuctions;
-          success = s.completedAuctions; // Approximate
+        if (s.totalSessions !== undefined) {
+          // Admin stats
+          setStatsData(prev => ({
+            ...prev,
+            totalSessions: s.totalSessions,
+            completedSessions: s.completedSessions,
+            cancelledSessions: s.cancelledSessions,
+            highestBid: s.highestBid ? `₹${s.highestBid.toLocaleString()}` : '₹0'
+          }));
+        } else {
+          // Farmer/Buyer stats
+          let total = 0;
+          let success = 0;
+
+          if (s.totalBids !== undefined) {
+            total = s.totalBids;
+            success = s.wonBids;
+          } else if (s.totalAuctions !== undefined) {
+            total = s.totalAuctions;
+            success = s.completedAuctions;
+          }
+
+          const rate = total > 0 ? Math.round((success / total) * 100) : 0;
+
+          setStatsData(prev => ({
+            ...prev,
+            totalTransactions: total,
+            successRate: `${rate}%`
+          }));
         }
-
-        const rate = total > 0 ? Math.round((success / total) * 100) : 0;
-
-        setStatsData(prev => ({
-          ...prev,
-          totalTransactions: total,
-          successRate: `${rate}%`
-        }));
       }
 
       // 3. Fetch Transactions (Orders)
@@ -175,8 +269,10 @@ const Profile = () => {
         name: `${formData.firstName} ${formData.lastName}`.trim(),
         email: formData.email,
         phone: formData.phone,
-        address: JSON.stringify(formData.address), // Store structured address as JSON string if backend expects string
-        // Add other fields if backend supports them
+        address: JSON.stringify(formData.address),
+        bio: formData.bio,
+        companyName: formData.company,
+        gstNumber: formData.gstNumber
       };
 
       const res = await api.put('/users/profile', payload);
@@ -202,7 +298,12 @@ const Profile = () => {
     return statusConfig[status] || 'bg-gray-100 text-gray-800';
   };
 
-  const stats = [
+  const stats = formData.role === 'ADMIN' ? [
+    { title: 'Total Sessions Created', value: statsData.totalSessions, icon: '📊', color: 'bg-blue-500' },
+    { title: 'Completed Sessions', value: statsData.completedSessions, icon: '✅', color: 'bg-green-500' },
+    { title: 'Cancelled Sessions', value: statsData.cancelledSessions, icon: '🚫', color: 'bg-red-500' },
+    { title: 'Highest Winning Bid', value: statsData.highestBid, icon: '💰', color: 'bg-yellow-500' }
+  ] : [
     { title: 'Total Transactions', value: statsData.totalTransactions, icon: '📊', color: 'bg-blue-500' },
     { title: 'Success Rate', value: statsData.successRate, icon: '🎯', color: 'bg-green-500' },
     { title: 'Member Since', value: statsData.memberSince, icon: '📅', color: 'bg-purple-500' },
@@ -223,15 +324,48 @@ const Profile = () => {
         {/* Header */}
         <div className="bg-white rounded-xl shadow-lg border border-gray-100 p-6 mb-8">
           <div className="flex items-center space-x-6">
-            <div className="relative">
+            <div className="relative group">
               <img
                 src={formData.profilePicture || `https://ui-avatars.com/api/?name=${formData.firstName}+${formData.lastName}`}
                 alt="Profile"
-                className="w-24 h-24 rounded-full border-4 border-white shadow-lg"
+                className="w-24 h-24 rounded-full border-4 border-white shadow-lg object-cover"
               />
-              <button className="absolute bottom-0 right-0 bg-green-600 text-white p-2 rounded-full hover:bg-green-700 transition-colors">
-                <span className="text-sm">📷</span>
-              </button>
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept="image/*"
+                onChange={handleProfilePictureUpload}
+                className="hidden"
+              />
+
+              {/* Action buttons - show on hover */}
+              <div className="absolute inset-0 bg-black bg-opacity-50 rounded-full opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-2">
+                {formData.profilePicture && (
+                  <>
+                    <button
+                      onClick={() => setShowImageModal(true)}
+                      className="bg-white text-gray-700 p-2 rounded-full hover:bg-gray-100 transition-colors shadow-lg"
+                      title="View profile picture"
+                    >
+                      <Eye size={16} />
+                    </button>
+                    <button
+                      onClick={handleRemoveProfilePicture}
+                      className="bg-red-600 text-white p-2 rounded-full hover:bg-red-700 transition-colors shadow-lg"
+                      title="Remove profile picture"
+                    >
+                      <Trash2 size={16} />
+                    </button>
+                  </>
+                )}
+                <button
+                  onClick={() => fileInputRef.current?.click()}
+                  className="bg-green-600 text-white p-2 rounded-full hover:bg-green-700 transition-colors shadow-lg"
+                  title="Upload profile picture"
+                >
+                  <Camera size={16} />
+                </button>
+              </div>
             </div>
             <div className="flex-1">
               <h1 className="text-3xl font-bold text-gray-900">
@@ -302,19 +436,20 @@ const Profile = () => {
                 { id: 'security', name: 'Security', icon: '🔒' },
                 { id: 'preferences', name: 'Preferences', icon: '⚙️' },
                 { id: 'transactions', name: 'Transaction History', icon: '📊' }
-              ].map((tab) => (
-                <button
-                  key={tab.id}
-                  onClick={() => setActiveTab(tab.id)}
-                  className={`${activeTab === tab.id
+              ].filter(tab => formData.role !== 'ADMIN' || tab.id !== 'transactions')
+                .map((tab) => (
+                  <button
+                    key={tab.id}
+                    onClick={() => setActiveTab(tab.id)}
+                    className={`${activeTab === tab.id
                       ? 'border-green-500 text-green-600'
                       : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
-                    } whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm flex items-center space-x-2`}
-                >
-                  <span>{tab.icon}</span>
-                  <span>{tab.name}</span>
-                </button>
-              ))}
+                      } whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm flex items-center space-x-2`}
+                  >
+                    <span>{tab.icon}</span>
+                    <span>{tab.name}</span>
+                  </button>
+                ))}
             </nav>
           </div>
 
@@ -584,6 +719,26 @@ const Profile = () => {
             )}
           </div>
         </div>
+
+        {/* Image View Modal */}
+        {showImageModal && formData.profilePicture && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-75 p-4" onClick={() => setShowImageModal(false)}>
+            <div className="relative max-w-4xl max-h-screen" onClick={(e) => e.stopPropagation()}>
+              <button
+                onClick={() => setShowImageModal(false)}
+                className="absolute -top-12 right-0 bg-white text-gray-700 p-2 rounded-full hover:bg-gray-100 transition-colors shadow-lg"
+                title="Close"
+              >
+                <X size={24} />
+              </button>
+              <img
+                src={formData.profilePicture}
+                alt="Profile Picture"
+                className="max-w-full max-h-screen rounded-lg shadow-2xl"
+              />
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );

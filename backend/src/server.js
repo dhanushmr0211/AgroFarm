@@ -78,6 +78,8 @@ const paymentRoutes = require('./routes/payments');
 const notificationRoutes = require('./routes/notifications');
 const userRoutes = require('./routes/users');
 const walletRoutes = require('./routes/wallet');
+const uploadRoutes = require('./routes/upload');
+const reviewRoutes = require('./routes/reviews');
 
 // Use routes
 app.use('/api/auth', authRoutes);
@@ -86,6 +88,8 @@ app.use('/api/payments', paymentRoutes);
 app.use('/api/notifications', notificationRoutes);
 app.use('/api/users', userRoutes);
 app.use('/api/wallet', walletRoutes);
+app.use('/api/upload', uploadRoutes);
+app.use('/api/reviews', reviewRoutes);
 
 // APMC endpoints
 app.get('/api/auth/apmcs', async (req, res) => {
