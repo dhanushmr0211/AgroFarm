@@ -383,10 +383,10 @@ const FarmerDashboard = () => {
         {/* Tabs */}
         <div className="bg-white rounded-lg shadow">
           <div className="border-b border-gray-200">
-            <nav className="-mb-px flex">
+            <nav className="-mb-px flex overflow-x-auto" style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}>
               <button
                 onClick={() => setActiveTab('overview')}
-                className={`py-4 px-6 text-sm font-medium border-b-2 ${activeTab === 'overview'
+                className={`flex-shrink-0 whitespace-nowrap py-4 px-6 text-sm font-medium border-b-2 ${activeTab === 'overview'
                   ? 'border-green-500 text-green-600'
                   : 'border-transparent text-gray-500 hover:text-gray-700'
                   }`}
@@ -395,7 +395,7 @@ const FarmerDashboard = () => {
               </button>
               <button
                 onClick={() => setActiveTab('produce')}
-                className={`py-4 px-6 text-sm font-medium border-b-2 ${activeTab === 'produce'
+                className={`flex-shrink-0 whitespace-nowrap py-4 px-6 text-sm font-medium border-b-2 ${activeTab === 'produce'
                   ? 'border-green-500 text-green-600'
                   : 'border-transparent text-gray-500 hover:text-gray-700'
                   }`}
@@ -404,7 +404,7 @@ const FarmerDashboard = () => {
               </button>
               <button
                 onClick={() => setActiveTab('auctions')}
-                className={`py-4 px-6 text-sm font-medium border-b-2 ${activeTab === 'auctions'
+                className={`flex-shrink-0 whitespace-nowrap py-4 px-6 text-sm font-medium border-b-2 ${activeTab === 'auctions'
                   ? 'border-green-500 text-green-600'
                   : 'border-transparent text-gray-500 hover:text-gray-700'
                   }`}
@@ -413,7 +413,7 @@ const FarmerDashboard = () => {
               </button>
               <button
                 onClick={() => setActiveTab('history')}
-                className={`py-4 px-6 text-sm font-medium border-b-2 ${activeTab === 'history'
+                className={`flex-shrink-0 whitespace-nowrap py-4 px-6 text-sm font-medium border-b-2 ${activeTab === 'history'
                   ? 'border-green-500 text-green-600'
                   : 'border-transparent text-gray-500 hover:text-gray-700'
                   }`}
@@ -422,7 +422,7 @@ const FarmerDashboard = () => {
               </button>
               <button
                 onClick={() => setActiveTab('notifications')}
-                className={`py-4 px-6 text-sm font-medium border-b-2 relative ${activeTab === 'notifications'
+                className={`flex-shrink-0 whitespace-nowrap py-4 px-6 text-sm font-medium border-b-2 relative ${activeTab === 'notifications'
                   ? 'border-green-500 text-green-600'
                   : 'border-transparent text-gray-500 hover:text-gray-700'
                   }`}
@@ -436,7 +436,7 @@ const FarmerDashboard = () => {
               </button>
               <button
                 onClick={() => setActiveTab('bookings')}
-                className={`py-4 px-6 text-sm font-medium border-b-2 ${activeTab === 'bookings'
+                className={`flex-shrink-0 whitespace-nowrap py-4 px-6 text-sm font-medium border-b-2 ${activeTab === 'bookings'
                   ? 'border-green-500 text-green-600'
                   : 'border-transparent text-gray-500 hover:text-gray-700'
                   }`}
