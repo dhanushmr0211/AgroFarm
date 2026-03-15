@@ -80,6 +80,11 @@ const authorizeRoles = (...roles) => {
       });
     }
 
+    // Important: Admins get access to everything
+    if (req.user.role === 'ADMIN') {
+      return next();
+    }
+
     if (!roles.includes(req.user.role)) {
       return res.status(403).json({
         success: false,
