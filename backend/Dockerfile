@@ -2,15 +2,23 @@ FROM node:20-alpine
 
 WORKDIR /app
 
+# Copy package files AND prisma schema (needed for postinstall → prisma generate)
 COPY package*.json ./
-RUN npm ci --only=production
+COPY prisma ./prisma/
 
+# Install all dependencies (including devDependencies for prisma CLI)
+# postinstall script will run prisma generate automatically
+RUN npm ci
+
+# Copy the rest of the application source
 COPY . .
 
-ENV NODE_ENV=production
-ENV PORT=5001
+# Remove devDependencies to keep image lean
+RUN npm prune --production
 
-EXPOSE 5001
+ENV NODE_ENV=production
+ENV PORT=10000
+
+EXPOSE 10000
 
 CMD ["node","src/server.js"]
-
