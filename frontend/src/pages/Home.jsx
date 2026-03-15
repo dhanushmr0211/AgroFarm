@@ -17,7 +17,7 @@ const Home = () => {
   const fetchSessions = async () => {
     try {
       setLoading(true)
-      const response = await api.get('/sessions')
+      const response = await api.get('/auctions/sessions')
 
       if (response.success && response.data) {
         // Filter only SCHEDULED and LIVE sessions for the home page
