@@ -36,7 +36,10 @@ const LiveBidding = () => {
     fetchChatHistory();
 
     // Initialize Socket connection
-    const newSocket = io(import.meta.env.VITE_API_URL || 'http://10.60.208.200:5001', {
+    const socketUrl = import.meta.env.VITE_API_URL
+      ? import.meta.env.VITE_API_URL.replace(/\/api\/?$/, '')
+      : 'http://localhost:5001';
+    const newSocket = io(socketUrl, {
       auth: { token: localStorage.getItem('token') }
     });
 

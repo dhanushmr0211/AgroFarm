@@ -1,6 +1,11 @@
 import axios from 'axios';
 
-const API_BASE = (import.meta.env.VITE_API_URL || 'http://10.60.208.200:5001/api');
+const envUrl = import.meta.env.VITE_API_URL;
+// In production: use VITE_API_URL env var (e.g. https://your-backend.onrender.com)
+// In development: fallback to local proxy (/api is proxied by Vite to localhost:5001)
+const API_BASE = envUrl 
+  ? (envUrl.endsWith('/api') ? envUrl : `${envUrl.replace(/\/$/, '')}/api`) 
+  : '/api';
 
 const api = axios.create({
   baseURL: API_BASE,

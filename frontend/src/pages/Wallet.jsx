@@ -3,6 +3,21 @@ import { useAuth } from '../contexts/AuthContext';
 import api from '../api';
 import { CreditCard, Plus, ArrowDownLeft, ArrowUpRight, Clock, CheckCircle } from 'lucide-react';
 
+// Dynamically load Razorpay script only when needed
+const loadRazorpayScript = () => {
+  return new Promise((resolve) => {
+    if (window.Razorpay) {
+      resolve(true);
+      return;
+    }
+    const script = document.createElement('script');
+    script.src = 'https://checkout.razorpay.com/v1/checkout.js';
+    script.onload = () => resolve(true);
+    script.onerror = () => resolve(false);
+    document.body.appendChild(script);
+  });
+};
+
 const Wallet = () => {
   const { user } = useAuth();
   const [activeTab, setActiveTab] = useState('overview');
@@ -65,6 +80,13 @@ const Wallet = () => {
     }
 
     try {
+      // Load Razorpay script dynamically
+      const scriptLoaded = await loadRazorpayScript();
+      if (!scriptLoaded) {
+        alert('Failed to load payment gateway. Please check your internet connection and try again.');
+        return;
+      }
+
       // Create Razorpay order
       const orderResponse = await api.post('/payments/create-order', {
         amount: parseInt(addAmount),

@@ -39,8 +39,8 @@ const FarmerDashboard = () => {
   const [loadingNotifications, setLoadingNotifications] = useState(false)
   const [bookingRequests, setBookingRequests] = useState([])
   const [loadingBookings, setLoadingBookings] = useState(false)
-  const [sessions, setSessions] = useState([])
-  const [loadingSessions, setLoadingSessions] = useState(false)
+  const [myLiveSessions, setMyLiveSessions] = useState([])
+  const [loadingMyLiveSessions, setLoadingMyLiveSessions] = useState(false)
 
   useEffect(() => {
     fetchAPMCs()
@@ -48,11 +48,11 @@ const FarmerDashboard = () => {
     fetchStats()
     fetchNotifications()
     fetchBookingRequests()
-    fetchSessions()
+    fetchMyLiveSessions()
 
-    // Auto-refresh notifications every 30 seconds
+    // Auto-refresh every 30 seconds
     const interval = setInterval(() => {
-      fetchSessions() // Also refresh sessions to see new ones
+      fetchMyLiveSessions()
       fetchNotifications()
       fetchBookingRequests()
     }, 30000)
@@ -60,23 +60,22 @@ const FarmerDashboard = () => {
     return () => clearInterval(interval)
   }, [])
 
-  const fetchSessions = async () => {
+  const fetchMyLiveSessions = async () => {
     try {
-      setLoadingSessions(true)
-      const response = await api.get('/sessions')
+      setLoadingMyLiveSessions(true)
+      // Fetch only this farmer's APPROVED booking requests
+      const response = await api.get('/auctions/farmer/booking-requests')
       if (response.success && response.data) {
-        // Filter only SCHEDULED sessions that haven't started yet
-        const upcomingSessions = response.data.filter(s =>
-          (s.status === 'SCHEDULED' || s.status === 'LIVE') &&
-          new Date(s.endTime) > new Date()
-        ).sort((a, b) => new Date(a.startTime) - new Date(b.startTime))
-
-        setSessions(upcomingSessions)
+        // Filter only APPROVED bookings whose sessions are currently LIVE
+        const liveApproved = response.data.filter(req =>
+          req.status === 'APPROVED' && req.session && req.session.status === 'LIVE'
+        )
+        setMyLiveSessions(liveApproved)
       }
     } catch (error) {
-      console.error('Failed to fetch sessions:', error)
+      console.error('Failed to fetch my live sessions:', error)
     } finally {
-      setLoadingSessions(false)
+      setLoadingMyLiveSessions(false)
     }
   }
 
@@ -450,80 +449,8 @@ const FarmerDashboard = () => {
           <div className="p-6">
             {activeTab === 'overview' && (
               <div>
-                {/* Upcoming Sessions Section */}
-                <div className="mb-10">
-                  <div className="flex justify-between items-center mb-6">
-                    <h2 className="text-xl font-semibold text-gray-900 flex items-center">
-                      <Calendar className="mr-2 text-blue-600" size={24} />
-                      Upcoming Auctions
-                    </h2>
-                    <button
-                      onClick={() => navigate('/apmc-schedule')}
-                      className="text-blue-600 hover:text-blue-800 font-medium text-sm flex items-center"
-                    >
-                      View Full Schedule <CheckCircle className="ml-1 w-4 h-4" />
-                    </button>
-                  </div>
-
-                  {loadingSessions ? (
-                    <div className="text-center py-8">
-                      <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto"></div>
-                      <p className="text-gray-500 mt-2">Loading upcoming auctions...</p>
-                    </div>
-                  ) : sessions.length === 0 ? (
-                    <div className="bg-blue-50 border border-blue-100 rounded-lg p-6 text-center">
-                      <p className="text-blue-600">No upcoming auctions scheduled at the moment.</p>
-                    </div>
-                  ) : (
-                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                      {sessions.slice(0, 3).map(session => (
-                        <div key={session.id} className="bg-white border border-gray-200 rounded-xl p-5 shadow-sm hover:shadow-md transition-shadow relative overflow-hidden group">
-                          {session.status === 'LIVE' && (
-                            <div className="absolute top-0 right-0 bg-green-500 text-white text-xs font-bold px-3 py-1 rounded-bl">
-                              LIVE
-                            </div>
-                          )}
-
-                          <h3 className="font-bold text-gray-900 text-lg mb-1">{session.apmc?.name}</h3>
-                          <p className="text-sm text-gray-500 mb-3 flex items-center">
-                            <MapPin size={14} className="mr-1" /> {session.apmc?.location}
-                          </p>
-
-                          <div className="space-y-2 mb-4">
-                            <div className="flex justify-between text-sm">
-                              <span className="text-gray-500">Category</span>
-                              <span className="font-medium text-gray-900">{session.category}</span>
-                            </div>
-                            <div className="flex justify-between text-sm">
-                              <span className="text-gray-500">Starts</span>
-                              <span className="font-medium text-blue-600">
-                                {new Date(session.startTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                              </span>
-                            </div>
-                          </div>
-
-                          <button
-                            onClick={() => navigate('/apmc-schedule')}
-                            className="w-full bg-blue-50 text-blue-700 py-2 rounded-lg font-medium hover:bg-blue-100 transition-colors group-hover:bg-blue-600 group-hover:text-white"
-                          >
-                            View Details
-                          </button>
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                </div>
-
-                <div className="flex justify-between items-center mb-6">
+                <div className="mb-6">
                   <h2 className="text-xl font-semibold text-gray-900">Recent Activity</h2>
-                  <button
-                    onClick={() => setShowAddProduceModal(true)}
-                    className="bg-green-600 text-white px-4 py-2 rounded-md hover:bg-green-700 flex items-center disabled:opacity-50"
-                    disabled={loading}
-                  >
-                    <Plus className="w-4 h-4 mr-2" />
-                    Add New Produce
-                  </button>
                 </div>
 
                 {/* Quick Actions Card */}
@@ -692,57 +619,115 @@ const FarmerDashboard = () => {
 
             {activeTab === 'auctions' && (
               <div>
-                <h2 className="text-xl font-semibold text-gray-900 mb-6">Live Auctions</h2>
-                {myProduce.filter(p => p.status === 'LIVE').length === 0 ? (
+                <div className="flex justify-between items-center mb-6">
+                  <h2 className="text-xl font-semibold text-gray-900">My Live Auctions</h2>
+                  <button
+                    onClick={() => navigate('/apmc-schedule')}
+                    className="text-blue-600 hover:text-blue-800 font-medium text-sm flex items-center"
+                  >
+                    <Calendar className="w-4 h-4 mr-1" />
+                    Browse APMC Schedule
+                  </button>
+                </div>
+
+                {/* My Produce that is LIVE */}
+                {myProduce.filter(p => p.status === 'LIVE').length > 0 && (
+                  <div className="mb-8">
+                    <h3 className="text-lg font-medium text-gray-800 mb-4">My Produce (Live)</h3>
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                      {myProduce.filter(p => p.status === 'LIVE').map((produce) => (
+                        <div key={produce.id} className="bg-white border-2 border-green-500 rounded-lg p-6 shadow-md relative overflow-hidden">
+                          <div className="absolute top-0 right-0 bg-green-500 text-white text-xs font-bold px-2 py-1 rounded-bl">
+                            LIVE NOW
+                          </div>
+                          <div className="flex justify-between items-start mb-4">
+                            <h3 className="text-lg font-semibold text-gray-900">{produce.title}</h3>
+                          </div>
+                          <div className="space-y-2 text-sm text-gray-600">
+                            <div className="flex justify-between">
+                              <span>Current High Bid:</span>
+                              <span className="font-bold text-xl text-green-600">₹{produce.currentBid?.toLocaleString() || produce.basePrice?.toLocaleString()}</span>
+                            </div>
+                            <div className="flex justify-between">
+                              <span>Quantity:</span>
+                              <span className="font-medium">{produce.quantity} {produce.unit}</span>
+                            </div>
+                            <div className="mt-4 flex space-x-3">
+                              <button
+                                onClick={() => navigate(`/produce/${produce.id}`)}
+                                className="flex-1 bg-green-600 text-white py-2 rounded hover:bg-green-700 transition text-sm font-medium"
+                              >
+                                Monitor Auction
+                              </button>
+                              {produce.sessionId && (
+                                <button
+                                  onClick={() => navigate(`/session/${produce.sessionId}`)}
+                                  className="flex-1 bg-blue-600 text-white py-2 rounded hover:bg-blue-700 transition text-sm font-medium"
+                                >
+                                  Join Session
+                                </button>
+                              )}
+                            </div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* Approved & Live Sessions */}
+                {loadingMyLiveSessions ? (
+                  <div className="text-center py-8">
+                    <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-green-600 mx-auto"></div>
+                    <p className="text-gray-500 mt-2">Loading your live sessions...</p>
+                  </div>
+                ) : myLiveSessions.length > 0 ? (
+                  <div className="mb-8">
+                    <h3 className="text-lg font-medium text-gray-800 mb-4">Approved Sessions (Live)</h3>
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                      {myLiveSessions.map((booking) => (
+                        <div key={booking.id} className="bg-white border-2 border-blue-500 rounded-xl p-5 shadow-md relative overflow-hidden group">
+                          <div className="absolute top-0 right-0 bg-blue-500 text-white text-xs font-bold px-3 py-1 rounded-bl">
+                            LIVE
+                          </div>
+                          <h3 className="font-bold text-gray-900 text-lg mb-1">{booking.session?.apmc?.name || booking.apmc?.name}</h3>
+                          <p className="text-sm text-gray-500 mb-3 flex items-center">
+                            <MapPin size={14} className="mr-1" /> {booking.session?.apmc?.location || booking.apmc?.location}
+                          </p>
+                          <div className="space-y-2 mb-4">
+                            <div className="flex justify-between text-sm">
+                              <span className="text-gray-500">Category</span>
+                              <span className="font-medium text-gray-900">{booking.session?.category || 'GENERAL'}</span>
+                            </div>
+                            <div className="flex justify-between text-sm">
+                              <span className="text-gray-500">Status</span>
+                              <span className="font-medium text-green-600">Approved ✓</span>
+                            </div>
+                          </div>
+                          <button
+                            onClick={() => navigate(`/session/${booking.session?.id || booking.sessionId}`)}
+                            className="w-full bg-blue-600 text-white py-2 rounded-lg font-medium hover:bg-blue-700 transition-colors"
+                          >
+                            Join Live Session
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                ) : null}
+
+                {/* Empty state when nothing is live */}
+                {myProduce.filter(p => p.status === 'LIVE').length === 0 && myLiveSessions.length === 0 && !loadingMyLiveSessions && (
                   <div className="text-center py-12 text-gray-500">
                     <Clock className="w-16 h-16 mx-auto mb-4 text-gray-400" />
                     <h3 className="text-lg font-medium text-gray-900 mb-2">No live auctions</h3>
-                    <p className="text-gray-600">Your live produce auctions will appear here.</p>
+                    <p className="text-gray-600 mb-4">Your accepted and live auctions will appear here.</p>
                     <button
                       onClick={() => navigate('/apmc-schedule')}
-                      className="mt-4 text-green-600 hover:text-green-800 font-medium"
+                      className="bg-blue-600 text-white px-6 py-2 rounded-lg hover:bg-blue-700 transition-colors font-medium"
                     >
-                      Looking for sessions? Check Schedule →
+                      Browse APMC Schedule →
                     </button>
-                  </div>
-                ) : (
-                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                    {myProduce.filter(p => p.status === 'LIVE').map((produce) => (
-                      <div key={produce.id} className="bg-white border-2 border-green-500 rounded-lg p-6 shadow-md relative overflow-hidden">
-                        <div className="absolute top-0 right-0 bg-green-500 text-white text-xs font-bold px-2 py-1 rounded-bl">
-                          LIVE NOW
-                        </div>
-                        <div className="flex justify-between items-start mb-4">
-                          <h3 className="text-lg font-semibold text-gray-900">{produce.title}</h3>
-                        </div>
-                        <div className="space-y-2 text-sm text-gray-600">
-                          <div className="flex justify-between">
-                            <span>Current High Bid:</span>
-                            <span className="font-bold text-xl text-green-600">₹{produce.currentBid?.toLocaleString() || produce.basePrice?.toLocaleString()}</span>
-                          </div>
-                          <div className="flex justify-between">
-                            <span>Quantity:</span>
-                            <span className="font-medium">{produce.quantity} {produce.unit}</span>
-                          </div>
-                          <div className="mt-4 flex space-x-3">
-                            <button
-                              onClick={() => navigate(`/produce/${produce.id}`)}
-                              className="flex-1 bg-green-600 text-white py-2 rounded hover:bg-green-700 transition text-sm font-medium"
-                            >
-                              Monitor Auction
-                            </button>
-                            {produce.sessionId && (
-                              <button
-                                onClick={() => navigate(`/session/${produce.sessionId}`)}
-                                className="flex-1 bg-blue-600 text-white py-2 rounded hover:bg-blue-700 transition text-sm font-medium"
-                              >
-                                Join Session
-                              </button>
-                            )}
-                          </div>
-                        </div>
-                      </div>
-                    ))}
                   </div>
                 )}
               </div>

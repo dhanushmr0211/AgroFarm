@@ -16,7 +16,7 @@ const notificationService = require('./services/notificationService');
 const app = express();
 const server = http.createServer(app);
 
-// CORS configuration - Allow access from any IP on local network
+// CORS configuration - Allow Vercel frontend, local dev, and private network
 const corsOptions = {
   origin: function (origin, callback) {
     // Allow requests with no origin (like mobile apps or Postman)
@@ -27,16 +27,22 @@ const corsOptions = {
       'http://localhost:3001',
       'http://127.0.0.1:3000',
       'http://127.0.0.1:3001',
+      'http://localhost:5173',
+      'http://127.0.0.1:5173',
       process.env.FRONTEND_URL
     ].filter(Boolean);
 
-    // Allow any private network IP (10.x.x.x, 192.168.x.x, 172.16-31.x.x)
-    const privateNetworkPattern = /^http:\/\/(10\.|192\.168\.|172\.(1[6-9]|2[0-9]|3[0-1])\.)[\d.]+:(3000|3001)$/;
+    // Allow any *.vercel.app deployment (preview + production)
+    const vercelPattern = /^https:\/\/[a-z0-9-]+\.vercel\.app$/;
 
-    if (allowedOrigins.includes(origin) || privateNetworkPattern.test(origin)) {
+    // Allow any private network IP (10.x.x.x, 192.168.x.x, 172.16-31.x.x)
+    const privateNetworkPattern = /^http:\/\/(10\.|192\.168\.|172\.(1[6-9]|2[0-9]|3[0-1])\.)[\\d.]+:(3000|3001|5173)$/;
+
+    if (allowedOrigins.includes(origin) || vercelPattern.test(origin) || privateNetworkPattern.test(origin)) {
       callback(null, true);
     } else {
-      callback(new Error('Not allowed by CORS'));
+      console.warn(`CORS rejected origin: ${origin}`);
+      callback(new Error(`Not allowed by CORS: ${origin}`));
     }
   },
   credentials: true,

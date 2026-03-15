@@ -6,8 +6,14 @@ class NotificationService {
     // Initialize Firebase Admin SDK
     if (!admin.apps.length) {
       try {
-        // Use service account key file for Firebase initialization
-        const serviceAccount = require('../config/firebase/firebase-key.json');
+        // Try loading service account from env var first (for Render/production),
+        // then fall back to local file (for development)
+        let serviceAccount;
+        if (process.env.FIREBASE_SERVICE_ACCOUNT_JSON) {
+          serviceAccount = JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT_JSON);
+        } else {
+          serviceAccount = require('../config/firebase/firebase-key.json');
+        }
 
         if (process.env.NODE_ENV !== 'development') {
           admin.initializeApp({

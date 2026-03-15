@@ -6,15 +6,13 @@ export function connectSocket(getToken) {
   if (socket && socket.connected) return socket
 
   const token = typeof getToken === 'function' ? getToken() : getToken
-  // Prefer VITE_API_URL in production; fallback to current host:5001 in dev
+  // In production: use VITE_API_URL (Render backend URL)
+  // In development: use localhost:5001
   const envUrl = (typeof import.meta !== 'undefined' && import.meta.env && import.meta.env.VITE_API_URL)
-    ? import.meta.env.VITE_API_URL
+    ? import.meta.env.VITE_API_URL.replace(/\/api\/?$/, '')
     : null
 
-  const hostname = window.location.hostname;
-  const backendUrl = (hostname === 'localhost' || hostname === '127.0.0.1')
-    ? 'http://localhost:5001'
-    : (envUrl || `${window.location.protocol}//${hostname}:5001`);
+  const backendUrl = envUrl || 'http://localhost:5001';
 
   socket = io(backendUrl, {
     transports: ['websocket'],

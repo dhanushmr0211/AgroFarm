@@ -503,6 +503,15 @@ router.get('/farmer/booking-requests', authenticateToken, authorizeRoles('FARMER
         status: request.status,
         createdAt: request.createdAt,
         reviewedAt: request.reviewedAt,
+        sessionId: request.sessionId,
+        session: request.session ? {
+          id: request.session.id,
+          status: request.session.status,
+          category: request.session.category,
+          startTime: request.session.startTime,
+          endTime: request.session.endTime,
+          apmc: request.session.apmc
+        } : null,
         apmc: request.session?.apmc || { name: 'Unknown APMC', location: 'Unknown Location' },
         reviewedBy: request.reviewer ? {
           id: request.reviewer.id,
