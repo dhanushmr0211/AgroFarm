@@ -1,8 +1,0 @@
-node_modules
-npm-debug.log
-.env
-prisma/dev.db
-prisma/*.sqlite
-prisma/*.db
-.DS_Store
-
