@@ -89,8 +89,8 @@ router.get('/transactions', authenticateToken, async (req, res) => {
             type: t.type === 'WALLET_TOPUP' || t.type === 'REFUND' || t.type === 'SALES_REVENUE' ? 'credit' : 'debit',
             amount: t.amount,
             description: t.description || t.type,
-            date: t.createdAt.toLocaleDateString(),
-            time: t.createdAt.toLocaleTimeString(),
+            date: t.createdAt.toLocaleDateString('en-IN', { timeZone: 'Asia/Kolkata' }),
+            time: t.createdAt.toLocaleTimeString('en-IN', { timeZone: 'Asia/Kolkata', hour12: true }),
             status: t.status.toLowerCase()
         }));
 
@@ -144,7 +144,7 @@ router.get('/escrow', authenticateToken, async (req, res) => {
             description: item.bid?.produce?.title || 'Unknown Item',
             farmer: item.farmer?.name,
             buyer: item.buyer?.name,
-            date: item.createdAt.toLocaleDateString(),
+            date: item.createdAt.toLocaleDateString('en-IN', { timeZone: 'Asia/Kolkata' }),
             expectedRelease: 'Pending Delivery', // Logic could be improved based on delivery date
             status: item.status
         }));
