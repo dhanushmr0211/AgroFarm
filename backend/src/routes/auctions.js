@@ -658,23 +658,14 @@ router.get('/sessions/:id', authenticateToken, async (req, res) => {
   }
 });
 
-// Get session with farmer queue
+// Get session with farmer queue & active turn details
 router.get('/sessions/:id/queue', authenticateToken, async (req, res) => {
   try {
     const { id } = req.params;
     const session = await prisma.auctionSession.findUnique({
       where: { id },
       include: {
-        registrations: {
-          where: { role: 'FARMER', status: 'BOOKED' },
-          include: { user: { select: { id: true, name: true } } },
-          orderBy: { createdAt: 'asc' }
-        },
-        produce: {
-          where: { status: { in: ['UPCOMING', 'LIVE'] } },
-          include: { farmer: { select: { id: true, name: true } } },
-          orderBy: { createdAt: 'asc' }
-        }
+        apmc: { select: { id: true, name: true, location: true } }
       }
     });
 
@@ -682,14 +673,407 @@ router.get('/sessions/:id/queue', authenticateToken, async (req, res) => {
       return res.status(404).json({ success: false, message: 'Session not found' });
     }
 
-    if (session.produce) {
-      session.produce = session.produce.map(parseImages);
+    // Get all produces in this session ordered by registration/creation time
+    let produces = await prisma.produce.findMany({
+      where: { sessionId: id },
+      include: {
+        farmer: { select: { id: true, name: true, email: true, phone: true } },
+        bids: {
+          where: { status: 'ACTIVE' },
+          include: { bidder: { select: { id: true, name: true, role: true } } },
+          orderBy: { amount: 'desc' }
+        },
+        winningBid: {
+          include: { bidder: { select: { id: true, name: true } } }
+        }
+      },
+      orderBy: { createdAt: 'asc' }
+    });
+
+    const now = new Date();
+
+    // Check if session is LIVE or SCHEDULED
+    let activeProduce = produces.find(p => p.status === 'LIVE');
+
+    // If session is LIVE and no produce is currently LIVE, activate first UPCOMING produce
+    if (!activeProduce && session.status === 'LIVE') {
+      const firstUpcoming = produces.find(p => p.status === 'UPCOMING');
+      if (firstUpcoming) {
+        activeProduce = await prisma.produce.update({
+          where: { id: firstUpcoming.id },
+          data: {
+            status: 'LIVE',
+            auctionStartTime: now,
+            auctionEndTime: new Date(now.getTime() + 5 * 60 * 1000) // 5 minutes turn
+          },
+          include: {
+            farmer: { select: { id: true, name: true, email: true, phone: true } },
+            bids: {
+              where: { status: 'ACTIVE' },
+              include: { bidder: { select: { id: true, name: true, role: true } } },
+              orderBy: { amount: 'desc' }
+            },
+            winningBid: {
+              include: { bidder: { select: { id: true, name: true } } }
+            }
+          }
+        });
+
+        // Update in memory list
+        const idx = produces.findIndex(p => p.id === firstUpcoming.id);
+        if (idx !== -1) produces[idx] = activeProduce;
+      }
     }
 
-    res.json({ success: true, data: session });
+    // If activeProduce exists, check if its 5-minute turn expired
+    if (activeProduce && activeProduce.auctionEndTime && now > new Date(activeProduce.auctionEndTime) && session.status === 'LIVE') {
+      console.log(`⏰ Farmer lot ${activeProduce.id} turn timer expired. Auto-advancing to next...`);
+      // Complete expired produce
+      await prisma.produce.update({
+        where: { id: activeProduce.id },
+        data: { status: 'COMPLETED' }
+      });
+      activeProduce.status = 'COMPLETED';
+
+      // Find next upcoming produce
+      const nextUpcoming = produces.find(p => p.id !== activeProduce.id && p.status === 'UPCOMING');
+      if (nextUpcoming) {
+        activeProduce = await prisma.produce.update({
+          where: { id: nextUpcoming.id },
+          data: {
+            status: 'LIVE',
+            auctionStartTime: now,
+            auctionEndTime: new Date(now.getTime() + 5 * 60 * 1000) // 5 minutes
+          },
+          include: {
+            farmer: { select: { id: true, name: true, email: true, phone: true } },
+            bids: {
+              where: { status: 'ACTIVE' },
+              include: { bidder: { select: { id: true, name: true, role: true } } },
+              orderBy: { amount: 'desc' }
+            },
+            winningBid: {
+              include: { bidder: { select: { id: true, name: true } } }
+            }
+          }
+        });
+        const nIdx = produces.findIndex(p => p.id === nextUpcoming.id);
+        if (nIdx !== -1) produces[nIdx] = activeProduce;
+      } else {
+        activeProduce = null;
+        // All lots finished - mark session completed
+        await prisma.auctionSession.update({
+          where: { id: session.id },
+          data: { status: 'COMPLETED' }
+        });
+        session.status = 'COMPLETED';
+      }
+    }
+
+    const parsedProduces = produces.map(parseImages);
+    const parsedActiveProduce = activeProduce ? parseImages(activeProduce) : null;
+    
+    let currentTurnIndex = 0;
+    if (parsedActiveProduce) {
+      currentTurnIndex = parsedProduces.findIndex(p => p.id === parsedActiveProduce.id) + 1;
+    } else {
+      currentTurnIndex = parsedProduces.length;
+    }
+
+    const timeRemainingMs = parsedActiveProduce?.auctionEndTime 
+      ? Math.max(0, new Date(parsedActiveProduce.auctionEndTime) - now) 
+      : 0;
+
+    res.json({
+      success: true,
+      data: {
+        session,
+        activeProduce: parsedActiveProduce,
+        queue: parsedProduces,
+        currentTurnIndex,
+        totalTurns: parsedProduces.length,
+        timeRemainingMs,
+        turnDurationSeconds: 300 // 5 mins
+      }
+    });
   } catch (error) {
     console.error('Get session queue error:', error);
     res.status(500).json({ success: false, message: 'Failed to get session queue' });
+  }
+});
+
+// Farmer accepts highest bid & exits lot -> moves to next farmer in queue
+router.post('/sessions/:id/accept-turn', authenticateToken, async (req, res) => {
+  try {
+    const { id } = req.params;
+    const now = new Date();
+
+    const activeProduce = await prisma.produce.findFirst({
+      where: { sessionId: id, status: 'LIVE' },
+      include: {
+        farmer: { select: { id: true, name: true } },
+        bids: {
+          where: { status: 'ACTIVE' },
+          orderBy: { amount: 'desc' },
+          take: 1,
+          include: { bidder: { select: { id: true, name: true } } }
+        }
+      }
+    });
+
+    if (!activeProduce) {
+      return res.status(400).json({ success: false, message: 'No active farmer lot currently live' });
+    }
+
+    // Only the farmer of this produce (or Admin) can accept
+    if (activeProduce.farmerId !== req.user.id && req.user.role !== 'ADMIN') {
+      return res.status(403).json({ success: false, message: 'Only the lot farmer can accept the highest bid' });
+    }
+
+    const highestBid = activeProduce.bids[0];
+
+    // Mark current produce completed
+    if (highestBid) {
+      await prisma.bid.update({
+        where: { id: highestBid.id },
+        data: { status: 'WON' }
+      });
+      await prisma.produce.update({
+        where: { id: activeProduce.id },
+        data: {
+          status: 'COMPLETED',
+          winningBidId: highestBid.id
+        }
+      });
+    } else {
+      await prisma.produce.update({
+        where: { id: activeProduce.id },
+        data: { status: 'COMPLETED' }
+      });
+    }
+
+    // Find next upcoming produce in session
+    const nextProduce = await prisma.produce.findFirst({
+      where: { sessionId: id, status: 'UPCOMING' },
+      orderBy: { createdAt: 'asc' },
+      include: { farmer: { select: { id: true, name: true } } }
+    });
+
+    let nextActive = null;
+    let announcementMessage = '';
+
+    if (nextProduce) {
+      nextActive = await prisma.produce.update({
+        where: { id: nextProduce.id },
+        data: {
+          status: 'LIVE',
+          auctionStartTime: now,
+          auctionEndTime: new Date(now.getTime() + 5 * 60 * 1000) // 5 minutes
+        },
+        include: {
+          farmer: { select: { id: true, name: true } },
+          bids: true
+        }
+      });
+
+      announcementMessage = `Farmer ${activeProduce.farmer.name} accepted bid of ₹${highestBid ? highestBid.amount : activeProduce.basePrice} and exited! Now Farmer ${nextProduce.farmer.name}'s turn for ${nextProduce.title} (5 mins remaining).`;
+    } else {
+      // Session finished
+      await prisma.auctionSession.update({
+        where: { id },
+        data: { status: 'COMPLETED' }
+      });
+      announcementMessage = `Farmer ${activeProduce.farmer.name} accepted bid of ₹${highestBid ? highestBid.amount : activeProduce.basePrice} and exited! All farmer lots in this session have concluded.`;
+    }
+
+    // Record system chat announcement
+    try {
+      await prisma.chatMessage.create({
+        data: {
+          sessionId: id,
+          userId: req.user.id,
+          message: announcementMessage,
+          type: 'ANNOUNCEMENT'
+        }
+      });
+    } catch (msgErr) {
+      console.error('Chat message log error:', msgErr);
+    }
+
+    // Broadcast socket events for real-time UI updates
+    try {
+      const socketService = req.app.get('socketService');
+      if (socketService && socketService.io) {
+        socketService.io.to(`session_${id}`).emit('turn_accepted', {
+          completedProduceId: activeProduce.id,
+          farmerName: activeProduce.farmer.name,
+          bidAmount: highestBid ? highestBid.amount : null,
+          nextFarmerName: nextProduce?.farmer?.name || null,
+          message: announcementMessage,
+          sessionCompleted: !nextProduce
+        });
+        socketService.io.to(`session_${id}`).emit('new_message', {
+          type: 'ANNOUNCEMENT',
+          message: announcementMessage,
+          createdAt: new Date()
+        });
+        if (!nextProduce) {
+          socketService.io.to(`session_${id}`).emit('session_completed', { sessionId: id });
+        }
+      }
+    } catch (socketErr) {
+      console.error('Socket broadcast error:', socketErr);
+    }
+
+    res.json({
+      success: true,
+      message: announcementMessage,
+      data: {
+        completedProduceId: activeProduce.id,
+        nextActiveProduce: nextActive ? parseImages(nextActive) : null,
+        sessionCompleted: !nextProduce
+      }
+    });
+
+  } catch (error) {
+    console.error('Accept turn error:', error);
+    res.status(500).json({ success: false, message: 'Failed to accept turn: ' + error.message });
+  }
+});
+
+// Farmer timeout / pass turn -> moves to next farmer in queue without selling
+router.post('/sessions/:id/timeout-turn', authenticateToken, async (req, res) => {
+  try {
+    const { id } = req.params;
+    const now = new Date();
+
+    const activeProduce = await prisma.produce.findFirst({
+      where: { sessionId: id, status: 'LIVE' },
+      include: {
+        farmer: { select: { id: true, name: true } }
+      }
+    });
+
+    if (!activeProduce) {
+      return res.status(400).json({ success: false, message: 'No active farmer lot currently live' });
+    }
+
+    // Mark current produce completed without selling
+    await prisma.produce.update({
+      where: { id: activeProduce.id },
+      data: { status: 'COMPLETED' }
+    });
+
+    // Find next upcoming produce
+    const nextProduce = await prisma.produce.findFirst({
+      where: { sessionId: id, status: 'UPCOMING' },
+      orderBy: { createdAt: 'asc' },
+      include: { farmer: { select: { id: true, name: true } } }
+    });
+
+    let nextActive = null;
+    let announcementMessage = '';
+
+    if (nextProduce) {
+      nextActive = await prisma.produce.update({
+        where: { id: nextProduce.id },
+        data: {
+          status: 'LIVE',
+          auctionStartTime: now,
+          auctionEndTime: new Date(now.getTime() + 5 * 60 * 1000)
+        },
+        include: {
+          farmer: { select: { id: true, name: true } },
+          bids: true
+        }
+      });
+
+      announcementMessage = `Farmer ${activeProduce.farmer.name}'s turn ended without selling. Now Farmer ${nextProduce.farmer.name}'s turn for ${nextProduce.title} (5 mins remaining).`;
+    } else {
+      await prisma.auctionSession.update({
+        where: { id },
+        data: { status: 'COMPLETED' }
+      });
+      announcementMessage = `Farmer ${activeProduce.farmer.name}'s turn ended without selling. All farmer lots in this session have concluded.`;
+    }
+
+    // Record system chat announcement
+    try {
+      await prisma.chatMessage.create({
+        data: {
+          sessionId: id,
+          userId: req.user.id,
+          message: announcementMessage,
+          type: 'ANNOUNCEMENT'
+        }
+      });
+    } catch (msgErr) {
+      console.error('Chat message log error:', msgErr);
+    }
+
+    // Broadcast socket events for real-time UI updates
+    try {
+      const socketService = req.app.get('socketService');
+      if (socketService && socketService.io) {
+        socketService.io.to(`session_${id}`).emit('turn_timeout', {
+          completedProduceId: activeProduce.id,
+          farmerName: activeProduce.farmer.name,
+          nextFarmerName: nextProduce?.farmer?.name || null,
+          message: announcementMessage,
+          sessionCompleted: !nextProduce
+        });
+        socketService.io.to(`session_${id}`).emit('new_message', {
+          type: 'ANNOUNCEMENT',
+          message: announcementMessage,
+          createdAt: new Date()
+        });
+        if (!nextProduce) {
+          socketService.io.to(`session_${id}`).emit('session_completed', { sessionId: id });
+        }
+      }
+    } catch (socketErr) {
+      console.error('Socket broadcast error:', socketErr);
+    }
+
+    res.json({
+      success: true,
+      message: announcementMessage,
+      data: {
+        completedProduceId: activeProduce.id,
+        nextActiveProduce: nextActive ? parseImages(nextActive) : null,
+        sessionCompleted: !nextProduce
+      }
+    });
+
+  } catch (error) {
+    console.error('Timeout turn error:', error);
+    res.status(500).json({ success: false, message: 'Failed to timeout turn: ' + error.message });
+  }
+});
+
+// Session participant presence endpoints
+router.post('/sessions/:id/enter', authenticateToken, async (req, res) => {
+  res.json({ success: true, message: 'Entered session room' });
+});
+
+router.post('/sessions/:id/exit', authenticateToken, async (req, res) => {
+  res.json({ success: true, message: 'Exited session room' });
+});
+
+router.post('/sessions/:id/end', authenticateToken, async (req, res) => {
+  try {
+    const { id } = req.params;
+    await prisma.auctionSession.update({
+      where: { id },
+      data: { status: 'COMPLETED', endTime: new Date() }
+    });
+    await prisma.produce.updateMany({
+      where: { sessionId: id, status: 'LIVE' },
+      data: { status: 'COMPLETED' }
+    });
+    res.json({ success: true, message: 'Session ended successfully' });
+  } catch (error) {
+    res.status(500).json({ success: false, message: 'Failed to end session' });
   }
 });
 
@@ -1061,20 +1445,21 @@ router.post('/', authenticateToken, authorizeRoles('FARMER'), async (req, res) =
       user: req.user
     });
 
+    // Default start and end times if not provided
+    const startTime = auctionStartTime ? new Date(auctionStartTime) : new Date(Date.now() + 60 * 60 * 1000);
+    const endTime = auctionEndTime ? new Date(auctionEndTime) : new Date(startTime.getTime() + 24 * 60 * 60 * 1000);
+
     // Validation
-    if (!title || !category || !quantity || !basePrice || !auctionStartTime || !auctionEndTime) {
-      console.log('Missing required fields:', { title, category, quantity, basePrice, auctionStartTime, auctionEndTime });
+    if (!title || !category || !quantity || !basePrice) {
+      console.log('Missing required fields:', { title, category, quantity, basePrice });
       return res.status(400).json({
         success: false,
-        message: 'Required fields: title, category, quantity, basePrice, auctionStartTime, auctionEndTime'
+        message: 'Required fields: title, category, quantity, basePrice'
       });
     }
 
-    const startTime = new Date(auctionStartTime);
-    const endTime = new Date(auctionEndTime);
-
     // Only validate start time for standalone auctions (no session)
-    if (!req.body.sessionId && startTime <= new Date()) {
+    if (!req.body.sessionId && auctionStartTime && startTime <= new Date()) {
       return res.status(400).json({
         success: false,
         message: 'Auction start time must be in the future'
@@ -1101,7 +1486,7 @@ router.post('/', authenticateToken, authorizeRoles('FARMER'), async (req, res) =
       if (!session) {
         return res.status(400).json({ success: false, message: 'Invalid sessionId' });
       }
-      if (session.apmcId !== user.apmcId) {
+      if (user?.apmcId && session.apmcId !== user.apmcId) {
         return res.status(400).json({ success: false, message: 'Session does not belong to your APMC' });
       }
 
@@ -1129,12 +1514,12 @@ router.post('/', authenticateToken, authorizeRoles('FARMER'), async (req, res) =
         storageTemp,
         certification,
         farmerId: req.user.id,
-        apmcId: user.apmcId,
+        apmcId: user?.apmcId || req.body.apmcId || null,
         pickupLocation,
         auctionStartTime: sessionId ? new Date(startTime) : startTime,
         auctionEndTime: sessionId ? new Date(endTime) : endTime,
         sessionId,
-        images: JSON.stringify(images),
+        images: typeof images === 'string' ? images : JSON.stringify(images),
         status: startTime <= new Date() ? 'LIVE' : 'UPCOMING'
       },
       include: {
@@ -1433,6 +1818,22 @@ router.post('/sessions/:id/bid', authenticateToken, authorizeRoles('BUYER'), asy
       }
     });
 
+    // Broadcast new bid to all session participants
+    try {
+      const socketService = req.app.get('socketService');
+      if (socketService && socketService.io) {
+        socketService.io.to(`session_${id}`).emit('new_bid', {
+          bid,
+          currentBid: parseFloat(amount),
+          bidderName: bid.bidder?.name,
+          produceId: activeProduce.id,
+          timestamp: new Date()
+        });
+      }
+    } catch (socketErr) {
+      console.error('Socket broadcast error:', socketErr);
+    }
+
     res.json({
       success: true,
       data: bid
@@ -1450,7 +1851,14 @@ router.post('/sessions/:id/bid', authenticateToken, authorizeRoles('BUYER'), asy
 // Request spot for session
 router.post('/request-spot', authenticateToken, async (req, res) => {
   try {
-    const { sessionId, productName, quantity, grade } = req.body;
+    const { sessionId, produceId, productName, quantity, grade } = req.body;
+
+    if (!sessionId) {
+      return res.status(400).json({
+        success: false,
+        message: 'Session ID is required'
+      });
+    }
 
     // Check if user already has a request for this session
     const existingRequest = await prisma.bookingRequest.findFirst({
@@ -1467,14 +1875,56 @@ router.post('/request-spot', authenticateToken, async (req, res) => {
       });
     }
 
+    const session = await prisma.auctionSession.findUnique({
+      where: { id: sessionId },
+      include: { apmc: true }
+    });
+
+    if (!session) {
+      return res.status(404).json({
+        success: false,
+        message: 'Auction session not found'
+      });
+    }
+
+    let finalProductName = productName;
+    let finalQuantity = parseInt(quantity);
+    let finalGrade = grade;
+
+    if (produceId) {
+      const produce = await prisma.produce.findFirst({
+        where: {
+          id: produceId,
+          farmerId: req.user.id
+        }
+      });
+
+      if (produce) {
+        finalProductName = produce.title;
+        finalQuantity = Math.round(produce.quantity);
+        finalGrade = produce.grade || finalGrade;
+
+        // Associate produce with this session and update APMC / session timing
+        await prisma.produce.update({
+          where: { id: produce.id },
+          data: {
+            sessionId: session.id,
+            apmcId: session.apmcId,
+            auctionStartTime: session.startTime,
+            auctionEndTime: session.endTime
+          }
+        });
+      }
+    }
+
     const booking = await prisma.bookingRequest.create({
       data: {
         sessionId,
         userId: req.user.id,
         role: req.user.role, // Required field from schema
-        productName: productName || 'Mixed Produce',
-        quantity: parseInt(quantity) || 100,
-        grade: grade || 'A',
+        productName: finalProductName || 'Mixed Produce',
+        quantity: finalQuantity || 100,
+        grade: finalGrade || 'A',
         status: 'PENDING'
       }
     });
@@ -1488,7 +1938,7 @@ router.post('/request-spot', authenticateToken, async (req, res) => {
     console.error('Request spot error:', error);
     res.status(500).json({
       success: false,
-      message: 'Failed to request spot'
+      message: 'Failed to request spot: ' + error.message
     });
   }
 });
