@@ -19,6 +19,7 @@ import SessionManagement from './pages/admin/SessionManagement'
 import UserStatistics from './pages/admin/UserStatistics'
 import LiveBiddingSession from './pages/LiveBiddingSession'
 import LiveBidding from './pages/LiveBidding'
+import AIAssistant from './components/AIAssistant'
 import './App.css'
 
 const queryClient = new QueryClient({
@@ -115,6 +116,8 @@ function App() {
 
               </Routes>
             </main>
+
+            <AIAssistant />
 
             <Toaster
               position="top-right"
