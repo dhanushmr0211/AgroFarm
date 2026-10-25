@@ -12,6 +12,7 @@ import {
   AlertCircle,
   CheckCircle,
   ChevronRight,
+  ChevronLeft,
   Timer,
   Package,
   Image as ImageIcon,
@@ -19,11 +20,49 @@ import {
   LogOut,
   Eye,
   Award,
-  XCircle
+  XCircle,
+  Maximize2,
+  X,
+  MapPin,
+  Calendar,
+  ShieldCheck,
+  Thermometer,
+  Sparkles,
+  Info
 } from 'lucide-react';
 import { toast } from 'react-hot-toast';
 
 const TURN_DURATION_SECONDS = 300; // 5 minutes
+
+// Robust helper to extract image URLs regardless of format (array, JSON, double-stringified, single URL)
+const extractImages = (rawImages) => {
+  if (!rawImages) return [];
+  if (Array.isArray(rawImages)) {
+    return rawImages.map(img => (typeof img === 'string' ? img : img?.url || '')).filter(Boolean);
+  }
+  if (typeof rawImages === 'string') {
+    try {
+      let parsed = JSON.parse(rawImages);
+      if (typeof parsed === 'string') {
+        try { parsed = JSON.parse(parsed); } catch (_) {}
+      }
+      if (Array.isArray(parsed)) {
+        return parsed.map(img => (typeof img === 'string' ? img : img?.url || '')).filter(Boolean);
+      }
+      if (typeof parsed === 'string' && (parsed.startsWith('http') || parsed.startsWith('data:') || parsed.startsWith('/'))) {
+        return [parsed];
+      }
+    } catch {
+      if (rawImages.includes(',')) {
+        return rawImages.split(',').map(s => s.trim()).filter(Boolean);
+      }
+      if (rawImages.startsWith('http') || rawImages.startsWith('data:') || rawImages.startsWith('/')) {
+        return [rawImages];
+      }
+    }
+  }
+  return [];
+};
 
 const LiveBidding = () => {
   const { sessionId } = useParams();
@@ -55,8 +94,16 @@ const LiveBidding = () => {
   // Announcements
   const [announcements, setAnnouncements] = useState([]);
 
-  // Active produce image gallery
+  // Produce images & modal gallery states
   const [activeImageIndex, setActiveImageIndex] = useState(0);
+  const [isImageModalOpen, setIsImageModalOpen] = useState(false);
+  const [previewQueueLot, setPreviewQueueLot] = useState(null);
+  const [previewImageIndex, setPreviewImageIndex] = useState(0);
+
+  // Automatically reset image gallery index when active produce changes
+  useEffect(() => {
+    setActiveImageIndex(0);
+  }, [activeProduce?.id]);
 
   // Refs
   const timerRef = useRef(null);
@@ -73,17 +120,17 @@ const LiveBidding = () => {
       if (data.session) setSession(data.session);
 
       const queueData = data.queue || [];
+      // Clean and normalize all queue produce images
+      queueData.forEach(p => {
+        p.images = extractImages(p.images);
+      });
       setQueue(queueData);
       setTotalTurns(data.totalTurns || queueData.length);
       setCurrentTurnIndex(data.currentTurnIndex || 0);
 
       const active = data.activeProduce;
       if (active) {
-        // Parse images
-        if (typeof active.images === 'string') {
-          try { active.images = JSON.parse(active.images); } catch { active.images = []; }
-        }
-        if (!active.images) active.images = [];
+        active.images = extractImages(active.images);
         setActiveProduce(active);
         const highestBid = active.bids?.[0]?.amount || active.currentBid || active.basePrice || 0;
         setCurrentBid(highestBid);
@@ -101,15 +148,6 @@ const LiveBidding = () => {
         setCurrentBid(0);
         setBidHistory([]);
       }
-
-      // Also parse images for queue items
-      queueData.forEach(p => {
-        if (typeof p.images === 'string') {
-          try { p.images = JSON.parse(p.images); } catch { p.images = []; }
-        }
-        if (!p.images) p.images = [];
-      });
-
     } catch (error) {
       console.error('Failed to fetch queue:', error);
     } finally {
@@ -413,34 +451,53 @@ const LiveBidding = () => {
       {/* ═══════════════════════════════════════════════════════════ */}
       {/* TURN BANNER & TIMER                                         */}
       {/* ═══════════════════════════════════════════════════════════ */}
+      {/* ═══════════════════════════════════════════════════════════ */}
+      {/* TURN BANNER & TIMER                                         */}
+      {/* ═══════════════════════════════════════════════════════════ */}
       {activeProduce && isSessionLive && (
-        <div className="bg-gradient-to-r from-emerald-700 via-green-700 to-teal-700 text-white">
+        <div className="bg-gradient-to-r from-emerald-950 via-teal-900 to-slate-950 text-white shadow-inner border-y border-emerald-500/30">
           <div className="max-w-7xl mx-auto px-4 py-4">
-            <div className="flex items-center justify-between flex-wrap gap-3">
+            <div className="flex items-center justify-between flex-wrap gap-4">
               <div className="flex items-center gap-3">
-                <div className="bg-black/25 backdrop-blur-sm rounded-lg px-3 py-1.5">
-                  <span className="text-sm font-bold text-white">Turn {currentTurnIndex} / {totalTurns}</span>
+                <div className="bg-white/10 backdrop-blur-md rounded-xl px-3.5 py-2 border border-white/20 shadow-sm text-center">
+                  <span className="text-[10px] uppercase font-extrabold tracking-wider text-emerald-300 block">Turn</span>
+                  <span className="text-base font-black text-white">{currentTurnIndex} <span className="text-white/60 font-medium text-xs">/ {totalTurns}</span></span>
                 </div>
                 <div>
-                  <div className="text-sm font-medium text-white/80">Currently Bidding On</div>
-                  <div className="text-lg font-bold flex items-center gap-2 text-white">
-                    🌾 {activeProduce.farmer?.name}'s {activeProduce.title}
+                  <div className="text-xs font-semibold uppercase tracking-wider text-emerald-300">Currently Bidding On</div>
+                  <div className="text-xl md:text-2xl font-black text-white flex items-center gap-2 drop-shadow-sm">
+                    🌾 <span>{activeProduce.farmer?.name}'s</span> <span className="text-emerald-300 underline decoration-emerald-400 decoration-2 underline-offset-4">{activeProduce.title}</span>
                   </div>
                 </div>
               </div>
               <div className="flex items-center gap-4">
-                <div className={`text-center bg-black/30 backdrop-blur-sm rounded-xl px-5 py-2 ${
-                  timeRemainingMs <= 30000 ? 'animate-pulse ring-2 ring-red-400 bg-red-900/50' : ''
+                {/* Ultra High-Contrast Timer Box */}
+                <div className={`flex items-center gap-3 bg-black/90 backdrop-blur-md rounded-2xl px-5 py-2.5 border-2 shadow-2xl transition-all ${
+                  timeRemainingMs <= 30000
+                    ? 'border-red-500 bg-red-950/80 animate-pulse ring-4 ring-red-500/30'
+                    : timeRemainingMs <= 60000
+                    ? 'border-amber-400 bg-amber-950/60 ring-2 ring-amber-400/20'
+                    : 'border-emerald-400/80 bg-slate-950/90'
                 }`}>
-                  <Timer className="h-5 w-5 mx-auto mb-0.5 text-yellow-300" />
-                  <div className={`text-2xl font-mono font-bold ${
-                    timeRemainingMs <= 30000 ? 'text-red-300' :
-                    timeRemainingMs <= 60000 ? 'text-orange-300' :
-                    'text-yellow-200'
+                  <div className={`p-2 rounded-xl ${
+                    timeRemainingMs <= 30000 ? 'bg-red-500/20 text-red-400' :
+                    timeRemainingMs <= 60000 ? 'bg-amber-500/20 text-amber-300' :
+                    'bg-emerald-500/20 text-emerald-300'
                   }`}>
-                    {formatTimer(timeRemainingMs)}
+                    <Timer className={`h-6 w-6 ${timeRemainingMs <= 30000 ? 'animate-bounce' : ''}`} />
                   </div>
-                  <div className="text-[10px] uppercase tracking-widest text-white/70">Remaining</div>
+                  <div className="text-right">
+                    <div className="text-[10px] font-black uppercase tracking-widest text-gray-300">
+                      Time Remaining
+                    </div>
+                    <div className={`text-3xl font-mono font-black tracking-wider drop-shadow-md ${
+                      timeRemainingMs <= 30000 ? 'text-red-400' :
+                      timeRemainingMs <= 60000 ? 'text-amber-300' :
+                      'text-emerald-300'
+                    }`}>
+                      {formatTimer(timeRemainingMs)}
+                    </div>
+                  </div>
                 </div>
               </div>
             </div>
@@ -452,9 +509,9 @@ const LiveBidding = () => {
       {/* QUEUE TRACKER PILLS                                         */}
       {/* ═══════════════════════════════════════════════════════════ */}
       {queue.length > 0 && (
-        <div className="bg-white border-b">
+        <div className="bg-white border-b shadow-sm">
           <div className="max-w-7xl mx-auto px-4 py-3">
-            <div className="flex items-center gap-1.5 overflow-x-auto pb-1">
+            <div className="flex items-center gap-2 overflow-x-auto pb-1">
               {queue.map((item, idx) => {
                 const isActive = activeProduce?.id === item.id;
                 const isCompleted = item.status === 'COMPLETED';
@@ -464,30 +521,46 @@ const LiveBidding = () => {
                 return (
                   <React.Fragment key={item.id}>
                     {idx > 0 && (
-                      <ChevronRight className="h-4 w-4 text-gray-300 flex-shrink-0" />
+                      <ChevronRight className="h-4 w-4 text-gray-400 flex-shrink-0" />
                     )}
-                    <div className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold flex-shrink-0 whitespace-nowrap border transition-all ${
-                      isActive
-                        ? 'bg-green-100 text-green-800 border-green-300 shadow-sm ring-2 ring-green-200'
-                        : isCompleted
-                        ? 'bg-gray-100 text-gray-500 border-gray-200'
-                        : 'bg-blue-50 text-blue-700 border-blue-200'
-                    } ${isMe ? 'ring-2 ring-yellow-400' : ''}`}>
-                      {isCompleted && <CheckCircle className="h-3.5 w-3.5 text-gray-400" />}
-                      {isActive && <span className="relative flex h-2.5 w-2.5"><span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75"></span><span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-green-500"></span></span>}
-                      {isUpcoming && <Clock className="h-3.5 w-3.5" />}
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setPreviewQueueLot(item);
+                        setPreviewImageIndex(0);
+                      }}
+                      title={`Click to preview ${item.farmer?.name || 'Farmer'}'s ${item.title || 'produce'} details & photos`}
+                      className={`flex items-center gap-1.5 px-3.5 py-1.5 rounded-full text-xs font-bold flex-shrink-0 whitespace-nowrap border transition-all cursor-pointer hover:scale-105 ${
+                        isActive
+                          ? 'bg-emerald-600 text-white border-emerald-700 shadow-md ring-2 ring-emerald-300'
+                          : isCompleted
+                          ? 'bg-gray-100 text-gray-600 border-gray-200 hover:bg-gray-200'
+                          : 'bg-blue-50 text-blue-800 border-blue-200 hover:bg-blue-100'
+                      } ${isMe ? 'ring-2 ring-amber-400' : ''}`}
+                    >
+                      {isCompleted && <CheckCircle className="h-3.5 w-3.5 text-gray-500" />}
+                      {isActive && <span className="relative flex h-2.5 w-2.5"><span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-white opacity-75"></span><span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-white"></span></span>}
+                      {isUpcoming && <Clock className="h-3.5 w-3.5 text-blue-600" />}
                       <span>
-                        {item.farmer?.name || `Farmer ${idx + 1}`}
+                        {item.farmer?.name || `Farmer ${idx + 1}`}: {item.title}
                         {isMe && ' (You)'}
                       </span>
+                      {item.images && item.images.length > 0 && (
+                        <span className={`inline-flex items-center gap-0.5 text-[10px] px-1.5 py-0.5 rounded-full font-semibold ${
+                          isActive ? 'bg-emerald-700 text-emerald-100' : 'bg-blue-100 text-blue-700'
+                        }`} title={`${item.images.length} photo(s) available`}>
+                          <ImageIcon size={10} />
+                          <span>{item.images.length}</span>
+                        </span>
+                      )}
                       {isCompleted && item.winningBid && (
-                        <span className="text-green-600 ml-1">Sold ₹{item.winningBid.amount}</span>
+                        <span className="text-emerald-700 font-bold ml-1 bg-emerald-50 px-1.5 py-0.5 rounded">Sold ₹{item.winningBid.amount}</span>
                       )}
                       {isCompleted && !item.winningBid && (
-                        <span className="text-gray-400 ml-1">Unsold</span>
+                        <span className="text-gray-500 ml-1">Unsold</span>
                       )}
-                      {isActive && <span className="text-green-700">LIVE</span>}
-                    </div>
+                      {isActive && <span className="bg-white/25 text-white px-1.5 py-0.5 rounded text-[10px] font-black tracking-wider ml-1">LIVE</span>}
+                    </button>
                   </React.Fragment>
                 );
               })}
@@ -525,88 +598,234 @@ const LiveBidding = () => {
           {/* ─── LEFT: Active Produce Details + Bidding Area ──────── */}
           <div className="lg:col-span-2 space-y-6">
 
-            {/* ACTIVE PRODUCE CARD WITH IMAGES */}
-            {activeProduce && isSessionLive && (
-              <div className="bg-white rounded-xl shadow-md border border-gray-200 overflow-hidden">
-                {/* Produce Images */}
+            {/* ACTIVE PRODUCE CARD WITH FULL PHOTOS & FARMER DETAILS */}
+            {activeProduce && (
+              <div className="bg-white rounded-2xl shadow-lg border border-gray-200 overflow-hidden">
+                {/* Produce Photo Showcase */}
                 {activeProduce.images && activeProduce.images.length > 0 ? (
-                  <div className="relative bg-gray-100">
-                    <img
-                      src={activeProduce.images[activeImageIndex]}
-                      alt={activeProduce.title}
-                      className="w-full h-64 md:h-80 object-cover"
-                      onError={(e) => { e.target.style.display = 'none'; }}
-                    />
-                    {activeProduce.images.length > 1 && (
-                      <div className="absolute bottom-3 left-1/2 -translate-x-1/2 flex gap-2">
-                        {activeProduce.images.map((_, imgIdx) => (
+                  <div className="bg-slate-950 relative flex flex-col">
+                    {/* Main Image Stage */}
+                    <div className="relative h-72 sm:h-84 md:h-96 w-full flex items-center justify-center p-2 overflow-hidden group select-none">
+                      <img
+                        src={activeProduce.images[activeImageIndex]}
+                        alt={activeProduce.title}
+                        className="max-h-full max-w-full object-contain mx-auto rounded-lg transition-transform duration-300 group-hover:scale-[1.02]"
+                        onError={(e) => {
+                          e.target.onerror = null;
+                          e.target.src = 'https://images.unsplash.com/photo-1542838132-92c53300491e?auto=format&fit=crop&w=800&q=80';
+                        }}
+                      />
+
+                      {/* Navigation Arrows (if multiple photos) */}
+                      {activeProduce.images.length > 1 && (
+                        <>
                           <button
-                            key={imgIdx}
-                            onClick={() => setActiveImageIndex(imgIdx)}
-                            className={`w-3 h-3 rounded-full transition-all ${
-                              imgIdx === activeImageIndex
-                                ? 'bg-white shadow-lg scale-110'
-                                : 'bg-white/50 hover:bg-white/70'
+                            type="button"
+                            onClick={() => setActiveImageIndex((prev) => (prev > 0 ? prev - 1 : activeProduce.images.length - 1))}
+                            className="absolute left-3 top-1/2 -translate-y-1/2 bg-black/60 hover:bg-black/90 text-white p-2.5 rounded-full shadow-lg transition backdrop-blur-sm focus:outline-none"
+                            title="Previous Photo"
+                          >
+                            <ChevronLeft size={22} />
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setActiveImageIndex((prev) => (prev < activeProduce.images.length - 1 ? prev + 1 : 0))}
+                            className="absolute right-3 top-1/2 -translate-y-1/2 bg-black/60 hover:bg-black/90 text-white p-2.5 rounded-full shadow-lg transition backdrop-blur-sm focus:outline-none"
+                            title="Next Photo"
+                          >
+                            <ChevronRight size={22} />
+                          </button>
+                        </>
+                      )}
+
+                      {/* Top Badges */}
+                      <div className="absolute top-3 left-3 flex items-center gap-2">
+                        <span className={`text-xs font-bold px-3 py-1 rounded-full shadow-md text-white flex items-center gap-1.5 ${
+                          isSessionLive ? 'bg-emerald-600 animate-pulse' : 'bg-blue-600'
+                        }`}>
+                          <span className="w-2 h-2 rounded-full bg-white"></span>
+                          {isSessionLive ? `LIVE — Turn ${currentTurnIndex}` : 'LOT PREVIEW'}
+                        </span>
+                        <span className="bg-black/60 backdrop-blur-sm text-white/90 text-xs px-2.5 py-1 rounded-full font-medium">
+                          {activeProduce.category}
+                        </span>
+                      </div>
+
+                      {/* Fullscreen Zoom Button */}
+                      <button
+                        type="button"
+                        onClick={() => setIsImageModalOpen(true)}
+                        className="absolute top-3 right-3 bg-black/60 hover:bg-black/90 text-white px-3 py-1.5 rounded-xl text-xs font-semibold flex items-center gap-1.5 backdrop-blur-sm shadow-md transition"
+                        title="Click to Zoom & View High-Res"
+                      >
+                        <Maximize2 size={14} />
+                        <span>Zoom Photo</span>
+                      </button>
+
+                      {/* Photo Index Counter */}
+                      <div className="absolute bottom-3 right-3 bg-black/70 backdrop-blur-sm text-white text-xs px-2.5 py-1 rounded-md font-mono flex items-center gap-1">
+                        <ImageIcon size={12} />
+                        <span>{activeImageIndex + 1} / {activeProduce.images.length}</span>
+                      </div>
+                    </div>
+
+                    {/* Thumbnail Strip (if multiple photos) */}
+                    {activeProduce.images.length > 1 && (
+                      <div className="flex gap-2.5 px-4 py-2.5 bg-slate-900 border-t border-slate-800 overflow-x-auto">
+                        {activeProduce.images.map((img, idx) => (
+                          <button
+                            key={idx}
+                            type="button"
+                            onClick={() => setActiveImageIndex(idx)}
+                            className={`relative rounded-lg overflow-hidden flex-shrink-0 w-16 h-14 border-2 transition-all cursor-pointer ${
+                              idx === activeImageIndex
+                                ? 'border-emerald-400 ring-2 ring-emerald-400/50 scale-105 shadow-md'
+                                : 'border-transparent opacity-60 hover:opacity-100 hover:scale-100'
                             }`}
-                          />
+                          >
+                            <img src={img} alt={`Thumbnail ${idx + 1}`} className="w-full h-full object-cover" />
+                          </button>
                         ))}
                       </div>
                     )}
-                    <div className="absolute top-3 left-3 bg-green-600 text-white text-xs font-bold px-3 py-1 rounded-full shadow">
-                      🔴 LIVE — Farmer {currentTurnIndex}
-                    </div>
                   </div>
                 ) : (
-                  <div className="bg-gradient-to-br from-emerald-50 to-green-50 h-40 flex items-center justify-center">
-                    <div className="text-center">
-                      <Package className="h-10 w-10 text-emerald-300 mx-auto mb-2" />
-                      <p className="text-sm text-emerald-600 font-medium">No product images uploaded</p>
+                  /* Fallback banner when no images uploaded */
+                  <div className="bg-gradient-to-br from-emerald-50 via-teal-50 to-green-100 p-8 text-center border-b border-gray-200">
+                    <div className="w-16 h-16 bg-white/80 rounded-2xl flex items-center justify-center mx-auto mb-3 shadow-sm border border-emerald-200">
+                      <Package className="h-8 w-8 text-emerald-600" />
                     </div>
+                    <span className="text-xs font-bold uppercase tracking-wider text-emerald-800 bg-emerald-100 px-3 py-1 rounded-full inline-block mb-2">
+                      {activeProduce.category}
+                    </span>
+                    <h3 className="text-xl font-bold text-gray-900">{activeProduce.title}</h3>
+                    <p className="text-xs text-gray-600 max-w-sm mx-auto mt-1">
+                      No photos were attached by the farmer for this lot. Certified produce specifications are detailed below.
+                    </p>
                   </div>
                 )}
 
-                {/* Produce Details */}
-                <div className="p-5">
-                  <div className="flex items-start justify-between mb-4">
+                {/* Produce Details & Specifications */}
+                <div className="p-6 space-y-6">
+                  {/* Header info */}
+                  <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-3 border-b border-gray-100 pb-5">
                     <div>
-                      <h2 className="text-xl font-bold text-gray-900">{activeProduce.title}</h2>
-                      <p className="text-sm text-gray-500 mt-1">
-                        by <span className="font-semibold text-gray-700">{activeProduce.farmer?.name}</span>
+                      <div className="flex items-center gap-2 flex-wrap mb-1">
+                        <h2 className="text-2xl font-black text-gray-900">{activeProduce.title}</h2>
+                        {activeProduce.grade && (
+                          <span className="bg-amber-100 text-amber-900 border border-amber-300 text-xs font-extrabold px-2.5 py-0.5 rounded-full flex items-center gap-1">
+                            <Sparkles size={12} className="text-amber-600" />
+                            Grade {activeProduce.grade}
+                          </span>
+                        )}
+                        {activeProduce.variety && (
+                          <span className="bg-purple-100 text-purple-800 text-xs font-semibold px-2.5 py-0.5 rounded-full">
+                            Variety: {activeProduce.variety}
+                          </span>
+                        )}
+                      </div>
+                      <p className="text-sm text-gray-600 flex items-center gap-1.5">
+                        <span>Registered by:</span>
+                        <span className="font-bold text-gray-900">{activeProduce.farmer?.name}</span>
+                        <span className="text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded text-xs font-semibold inline-flex items-center gap-1">
+                          <ShieldCheck size={13} />
+                          Verified Farmer
+                        </span>
                       </p>
                     </div>
-                    <span className="bg-emerald-100 text-emerald-700 text-xs font-bold px-3 py-1 rounded-full">
-                      {activeProduce.category}
-                    </span>
-                  </div>
 
-                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-5">
-                    <div className="bg-gray-50 rounded-lg p-3 text-center border border-gray-100">
-                      <div className="text-xs text-gray-500 font-medium uppercase">Quantity</div>
-                      <div className="text-base font-bold text-gray-900">{activeProduce.quantity} {activeProduce.unit || 'kg'}</div>
-                    </div>
-                    <div className="bg-gray-50 rounded-lg p-3 text-center border border-gray-100">
-                      <div className="text-xs text-gray-500 font-medium uppercase">Grade</div>
-                      <div className="text-base font-bold text-gray-900">{activeProduce.grade || 'N/A'}</div>
-                    </div>
-                    <div className="bg-gray-50 rounded-lg p-3 text-center border border-gray-100">
-                      <div className="text-xs text-gray-500 font-medium uppercase">Base Price</div>
-                      <div className="text-base font-bold text-gray-900">₹{activeProduce.basePrice}</div>
-                    </div>
-                    <div className="bg-green-50 rounded-lg p-3 text-center border border-green-100">
-                      <div className="text-xs text-green-600 font-medium uppercase">Current Bid</div>
-                      <div className="text-lg font-bold text-green-700">₹{currentBid.toLocaleString()}</div>
+                    <div className="flex items-center gap-2">
+                      <span className="bg-emerald-100 text-emerald-800 text-xs font-bold px-3 py-1.5 rounded-xl border border-emerald-200 uppercase tracking-wide">
+                        {activeProduce.category}
+                      </span>
                     </div>
                   </div>
 
+                  {/* Core Metrics Grid */}
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                    <div className="bg-gray-50 rounded-xl p-3.5 text-center border border-gray-200">
+                      <div className="text-[11px] text-gray-500 font-bold uppercase tracking-wider">Lot Quantity</div>
+                      <div className="text-lg font-black text-gray-900 mt-0.5">{activeProduce.quantity} {activeProduce.unit || 'kg'}</div>
+                    </div>
+                    <div className="bg-gray-50 rounded-xl p-3.5 text-center border border-gray-200">
+                      <div className="text-[11px] text-gray-500 font-bold uppercase tracking-wider">Quality Grade</div>
+                      <div className="text-lg font-black text-amber-700 mt-0.5">{activeProduce.grade || 'Standard'}</div>
+                    </div>
+                    <div className="bg-gray-50 rounded-xl p-3.5 text-center border border-gray-200">
+                      <div className="text-[11px] text-gray-500 font-bold uppercase tracking-wider">Base Price</div>
+                      <div className="text-lg font-black text-gray-900 mt-0.5">₹{activeProduce.basePrice?.toLocaleString()}</div>
+                    </div>
+                    <div className="bg-emerald-50 rounded-xl p-3.5 text-center border-2 border-emerald-300 shadow-sm">
+                      <div className="text-[11px] text-emerald-700 font-bold uppercase tracking-wider">Current High Bid</div>
+                      <div className="text-xl font-black text-emerald-700 mt-0.5">₹{currentBid.toLocaleString()}</div>
+                    </div>
+                  </div>
+
+                  {/* Registered Crop Specifications Grid */}
+                  <div className="bg-gray-50/70 rounded-xl p-4 border border-gray-200">
+                    <h3 className="text-xs font-black uppercase tracking-wider text-gray-600 mb-3 flex items-center gap-1.5">
+                      <Info size={14} className="text-blue-600" />
+                      Farmer Registration Specifications
+                    </h3>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3 text-xs">
+                      {activeProduce.variety && (
+                        <div className="bg-white p-2.5 rounded-lg border border-gray-200">
+                          <span className="text-gray-500 block">Variety:</span>
+                          <span className="font-bold text-gray-900 text-sm">{activeProduce.variety}</span>
+                        </div>
+                      )}
+                      <div className="bg-white p-2.5 rounded-lg border border-gray-200">
+                        <span className="text-gray-500 flex items-center gap-1">
+                          <Calendar size={12} className="text-gray-400" /> Harvest Date:
+                        </span>
+                        <span className="font-bold text-gray-900 text-sm">
+                          {activeProduce.harvestDate ? new Date(activeProduce.harvestDate).toLocaleDateString() : 'Fresh Harvest'}
+                        </span>
+                      </div>
+                      <div className="bg-white p-2.5 rounded-lg border border-gray-200">
+                        <span className="text-gray-500 flex items-center gap-1">
+                          <Clock size={12} className="text-gray-400" /> Shelf Life:
+                        </span>
+                        <span className="font-bold text-gray-900 text-sm">
+                          {activeProduce.shelfLife ? `${activeProduce.shelfLife} Days` : 'Standard Shelf Life'}
+                        </span>
+                      </div>
+                      <div className="bg-white p-2.5 rounded-lg border border-gray-200">
+                        <span className="text-gray-500 flex items-center gap-1">
+                          <Thermometer size={12} className="text-gray-400" /> Storage Temp:
+                        </span>
+                        <span className="font-bold text-gray-900 text-sm">
+                          {activeProduce.storageTemp || 'Room Temperature'}
+                        </span>
+                      </div>
+                      <div className="bg-white p-2.5 rounded-lg border border-gray-200">
+                        <span className="text-gray-500 flex items-center gap-1">
+                          <ShieldCheck size={12} className="text-gray-400" /> Certification:
+                        </span>
+                        <span className="font-bold text-gray-900 text-sm">
+                          {activeProduce.certification || 'Verified APMC Standard'}
+                        </span>
+                      </div>
+                      <div className="bg-white p-2.5 rounded-lg border border-gray-200">
+                        <span className="text-gray-500 flex items-center gap-1">
+                          <MapPin size={12} className="text-gray-400" /> Pickup Location:
+                        </span>
+                        <span className="font-bold text-gray-900 text-sm truncate block" title={activeProduce.pickupLocation || session?.apmc?.location}>
+                          {activeProduce.pickupLocation || session?.apmc?.location || 'Mandi Yard'}
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Description & Crop Notes */}
                   {activeProduce.description && (
-                    <p className="text-sm text-gray-600 mb-4 bg-gray-50 p-3 rounded-lg">
-                      {activeProduce.description}
-                    </p>
-                  )}
-
-                  {activeProduce.variety && (
-                    <div className="text-xs text-gray-500 mb-2">
-                      <span className="font-semibold">Variety:</span> {activeProduce.variety}
+                    <div className="bg-emerald-50/50 rounded-xl p-4 border border-emerald-100">
+                      <h4 className="text-xs font-black uppercase tracking-wider text-emerald-800 mb-1.5 flex items-center gap-1">
+                        🌾 Farmer's Crop Description & Notes
+                      </h4>
+                      <p className="text-sm text-gray-700 leading-relaxed whitespace-pre-line">
+                        {activeProduce.description}
+                      </p>
                     </div>
                   )}
                 </div>
@@ -618,10 +837,20 @@ const LiveBidding = () => {
             {/* BUYER BIDDING PANEL */}
             {user?.role === 'BUYER' && activeProduce && isSessionLive && timeRemainingMs > 0 && (
               <div className="bg-white rounded-xl shadow-md border border-gray-200 p-5">
-                <h3 className="text-base font-bold text-gray-900 mb-4 flex items-center gap-2">
-                  <Gavel className="h-5 w-5 text-blue-600" />
-                  Place Your Bid
-                </h3>
+                <div className="flex items-center justify-between mb-4">
+                  <h3 className="text-base font-bold text-gray-900 flex items-center gap-2">
+                    <Gavel className="h-5 w-5 text-blue-600" />
+                    Place Your Bid
+                  </h3>
+                  <div className={`flex items-center gap-1.5 px-3 py-1 rounded-lg text-xs font-mono font-bold border ${
+                    timeRemainingMs <= 30000 ? 'bg-red-50 text-red-600 border-red-200 animate-pulse' :
+                    timeRemainingMs <= 60000 ? 'bg-amber-50 text-amber-700 border-amber-200' :
+                    'bg-slate-100 text-slate-800 border-slate-200'
+                  }`}>
+                    <Timer size={14} className={timeRemainingMs <= 30000 ? 'animate-spin' : ''} />
+                    <span>{formatTimer(timeRemainingMs)} left</span>
+                  </div>
+                </div>
                 <div className="flex items-center gap-3">
                   <div className="flex-1 relative">
                     <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 font-bold">₹</span>
@@ -885,6 +1114,275 @@ const LiveBidding = () => {
           </div>
         </div>
       </div>
+
+      {/* ═══════════════════════════════════════════════════════════ */}
+      {/* FULLSCREEN PHOTO LIGHTBOX MODAL                             */}
+      {/* ═══════════════════════════════════════════════════════════ */}
+      {isImageModalOpen && activeProduce?.images && activeProduce.images.length > 0 && (
+        <div className="fixed inset-0 z-50 bg-black/95 flex flex-col items-center justify-center p-4 backdrop-blur-md animate-fadeIn">
+          {/* Top Bar */}
+          <div className="w-full max-w-5xl flex items-center justify-between text-white pb-3 border-b border-white/10">
+            <div>
+              <h3 className="font-bold text-lg">{activeProduce.title}</h3>
+              <p className="text-xs text-gray-400">Photo {activeImageIndex + 1} of {activeProduce.images.length} • Registered by {activeProduce.farmer?.name}</p>
+            </div>
+            <button
+              type="button"
+              onClick={() => setIsImageModalOpen(false)}
+              className="bg-white/10 hover:bg-white/20 text-white p-2 rounded-full transition"
+            >
+              <X size={22} />
+            </button>
+          </div>
+
+          {/* Image Stage */}
+          <div className="relative flex-1 w-full max-w-5xl flex items-center justify-center my-4 overflow-hidden">
+            <img
+              src={activeProduce.images[activeImageIndex]}
+              alt={activeProduce.title}
+              className="max-h-[75vh] max-w-full object-contain rounded-xl shadow-2xl"
+            />
+
+            {/* Lightbox Nav Arrows */}
+            {activeProduce.images.length > 1 && (
+              <>
+                <button
+                  type="button"
+                  onClick={() => setActiveImageIndex((prev) => (prev > 0 ? prev - 1 : activeProduce.images.length - 1))}
+                  className="absolute left-2 top-1/2 -translate-y-1/2 bg-black/70 hover:bg-black/90 text-white p-3 rounded-full transition shadow-xl"
+                  title="Previous"
+                >
+                  <ChevronLeft size={28} />
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setActiveImageIndex((prev) => (prev < activeProduce.images.length - 1 ? prev + 1 : 0))}
+                  className="absolute right-2 top-1/2 -translate-y-1/2 bg-black/70 hover:bg-black/90 text-white p-3 rounded-full transition shadow-xl"
+                  title="Next"
+                >
+                  <ChevronRight size={28} />
+                </button>
+              </>
+            )}
+          </div>
+
+          {/* Thumbnails in Lightbox */}
+          {activeProduce.images.length > 1 && (
+            <div className="flex gap-2 max-w-5xl overflow-x-auto py-2">
+              {activeProduce.images.map((img, idx) => (
+                <button
+                  key={idx}
+                  type="button"
+                  onClick={() => setActiveImageIndex(idx)}
+                  className={`w-16 h-12 rounded-lg overflow-hidden border-2 transition flex-shrink-0 ${
+                    idx === activeImageIndex ? 'border-emerald-400 ring-2 ring-emerald-400/50 scale-105' : 'border-transparent opacity-50 hover:opacity-100'
+                  }`}
+                >
+                  <img src={img} alt={`Thumb ${idx + 1}`} className="w-full h-full object-cover" />
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* ═══════════════════════════════════════════════════════════ */}
+      {/* QUEUE LOT PRODUCE & PHOTOS PREVIEW MODAL                    */}
+      {/* ═══════════════════════════════════════════════════════════ */}
+      {previewQueueLot && (
+        <div className="fixed inset-0 z-50 bg-black/80 flex items-center justify-center p-4 backdrop-blur-sm animate-fadeIn">
+          <div className="bg-white rounded-2xl max-w-2xl w-full max-h-[92vh] overflow-y-auto shadow-2xl border border-gray-200 flex flex-col">
+            {/* Modal Header */}
+            <div className="p-5 border-b border-gray-100 flex items-center justify-between sticky top-0 bg-white z-10">
+              <div className="flex items-center gap-2.5">
+                <div className="p-2 bg-emerald-100 text-emerald-800 rounded-xl">
+                  <Package size={20} />
+                </div>
+                <div>
+                  <h3 className="text-lg font-bold text-gray-900">{previewQueueLot.title}</h3>
+                  <p className="text-xs text-gray-500">
+                    Registered by <span className="font-semibold text-gray-700">{previewQueueLot.farmer?.name}</span>
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setPreviewQueueLot(null)}
+                className="text-gray-400 hover:text-gray-700 p-1.5 rounded-lg hover:bg-gray-100 transition"
+              >
+                <X size={20} />
+              </button>
+            </div>
+
+            {/* Modal Body */}
+            <div className="p-5 space-y-5">
+              {/* Photo Showcase of Previewed Lot */}
+              {previewQueueLot.images && previewQueueLot.images.length > 0 ? (
+                <div className="bg-slate-950 rounded-xl overflow-hidden relative">
+                  <div className="h-64 sm:h-72 w-full flex items-center justify-center p-2">
+                    <img
+                      src={previewQueueLot.images[previewImageIndex]}
+                      alt={previewQueueLot.title}
+                      className="max-h-full max-w-full object-contain mx-auto rounded-lg"
+                      onError={(e) => {
+                        e.target.onerror = null;
+                        e.target.src = 'https://images.unsplash.com/photo-1542838132-92c53300491e?auto=format&fit=crop&w=800&q=80';
+                      }}
+                    />
+
+                    {previewQueueLot.images.length > 1 && (
+                      <>
+                        <button
+                          type="button"
+                          onClick={() => setPreviewImageIndex((prev) => (prev > 0 ? prev - 1 : previewQueueLot.images.length - 1))}
+                          className="absolute left-2 top-1/2 -translate-y-1/2 bg-black/60 hover:bg-black/90 text-white p-2 rounded-full shadow transition"
+                        >
+                          <ChevronLeft size={20} />
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setPreviewImageIndex((prev) => (prev < previewQueueLot.images.length - 1 ? prev + 1 : 0))}
+                          className="absolute right-2 top-1/2 -translate-y-1/2 bg-black/60 hover:bg-black/90 text-white p-2 rounded-full shadow transition"
+                        >
+                          <ChevronRight size={20} />
+                        </button>
+                      </>
+                    )}
+
+                    <div className="absolute bottom-2 right-2 bg-black/70 text-white text-[11px] px-2 py-0.5 rounded font-mono">
+                      {previewImageIndex + 1} / {previewQueueLot.images.length} Photos
+                    </div>
+                  </div>
+
+                  {previewQueueLot.images.length > 1 && (
+                    <div className="flex gap-2 p-2 bg-slate-900 overflow-x-auto border-t border-slate-800">
+                      {previewQueueLot.images.map((img, idx) => (
+                        <button
+                          key={idx}
+                          type="button"
+                          onClick={() => setPreviewImageIndex(idx)}
+                          className={`w-14 h-11 rounded-md overflow-hidden border-2 transition flex-shrink-0 ${
+                            idx === previewImageIndex ? 'border-emerald-400' : 'border-transparent opacity-60'
+                          }`}
+                        >
+                          <img src={img} alt={`Thumb ${idx + 1}`} className="w-full h-full object-cover" />
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              ) : (
+                <div className="bg-gray-100 rounded-xl p-6 text-center">
+                  <Package className="h-10 w-10 text-gray-400 mx-auto mb-1.5" />
+                  <p className="text-xs text-gray-600 font-medium">No photos uploaded for this lot</p>
+                </div>
+              )}
+
+              {/* Status & Key Badges */}
+              <div className="flex flex-wrap gap-2 items-center">
+                <span className={`text-xs font-bold px-2.5 py-1 rounded-full ${
+                  previewQueueLot.status === 'LIVE' ? 'bg-emerald-100 text-emerald-800 border border-emerald-300' :
+                  previewQueueLot.status === 'COMPLETED' ? 'bg-gray-100 text-gray-700' :
+                  'bg-blue-100 text-blue-800'
+                }`}>
+                  Status: {previewQueueLot.status}
+                </span>
+                <span className="bg-gray-100 text-gray-800 text-xs font-semibold px-2.5 py-1 rounded-full">
+                  Category: {previewQueueLot.category}
+                </span>
+                {previewQueueLot.grade && (
+                  <span className="bg-amber-100 text-amber-900 border border-amber-300 text-xs font-bold px-2.5 py-1 rounded-full">
+                    Grade {previewQueueLot.grade}
+                  </span>
+                )}
+                {previewQueueLot.variety && (
+                  <span className="bg-purple-100 text-purple-800 text-xs font-semibold px-2.5 py-1 rounded-full">
+                    Variety: {previewQueueLot.variety}
+                  </span>
+                )}
+              </div>
+
+              {/* Metrics */}
+              <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+                <div className="bg-gray-50 rounded-xl p-3 border border-gray-200 text-center">
+                  <div className="text-[11px] text-gray-500 font-bold uppercase">Lot Quantity</div>
+                  <div className="text-base font-black text-gray-900 mt-0.5">{previewQueueLot.quantity} {previewQueueLot.unit || 'kg'}</div>
+                </div>
+                <div className="bg-gray-50 rounded-xl p-3 border border-gray-200 text-center">
+                  <div className="text-[11px] text-gray-500 font-bold uppercase">Base Price</div>
+                  <div className="text-base font-black text-gray-900 mt-0.5">₹{previewQueueLot.basePrice?.toLocaleString()}</div>
+                </div>
+                {previewQueueLot.winningBid ? (
+                  <div className="bg-emerald-50 rounded-xl p-3 border border-emerald-200 text-center col-span-2 sm:col-span-1">
+                    <div className="text-[11px] text-emerald-700 font-bold uppercase">Sold Price</div>
+                    <div className="text-base font-black text-emerald-700 mt-0.5">₹{previewQueueLot.winningBid.amount?.toLocaleString()}</div>
+                  </div>
+                ) : (
+                  <div className="bg-blue-50 rounded-xl p-3 border border-blue-200 text-center col-span-2 sm:col-span-1">
+                    <div className="text-[11px] text-blue-700 font-bold uppercase">Current / High Bid</div>
+                    <div className="text-base font-black text-blue-700 mt-0.5">₹{(previewQueueLot.currentBid || previewQueueLot.basePrice)?.toLocaleString()}</div>
+                  </div>
+                )}
+              </div>
+
+              {/* Specifications Grid */}
+              <div className="bg-gray-50 rounded-xl p-4 border border-gray-200 space-y-2 text-xs">
+                <h4 className="font-bold text-gray-800 uppercase tracking-wider text-[11px] mb-2 flex items-center gap-1.5">
+                  <Info size={13} className="text-blue-600" />
+                  Produce Specifications
+                </h4>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                  <div className="bg-white p-2 rounded border border-gray-200 flex items-center gap-1.5">
+                    <MapPin size={13} className="text-gray-400" />
+                    <span>Location: <strong className="text-gray-800">{previewQueueLot.pickupLocation || session?.apmc?.location || 'APMC Mandi'}</strong></span>
+                  </div>
+                  {previewQueueLot.harvestDate && (
+                    <div className="bg-white p-2 rounded border border-gray-200 flex items-center gap-1.5">
+                      <Calendar size={13} className="text-gray-400" />
+                      <span>Harvest: <strong className="text-gray-800">{new Date(previewQueueLot.harvestDate).toLocaleDateString()}</strong></span>
+                    </div>
+                  )}
+                  {previewQueueLot.shelfLife && (
+                    <div className="bg-white p-2 rounded border border-gray-200 flex items-center gap-1.5">
+                      <Clock size={13} className="text-gray-400" />
+                      <span>Shelf Life: <strong className="text-gray-800">{previewQueueLot.shelfLife} Days</strong></span>
+                    </div>
+                  )}
+                  {previewQueueLot.certification && (
+                    <div className="bg-white p-2 rounded border border-gray-200 flex items-center gap-1.5">
+                      <ShieldCheck size={13} className="text-gray-400" />
+                      <span>Certified: <strong className="text-gray-800">{previewQueueLot.certification}</strong></span>
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* Farmer description */}
+              {previewQueueLot.description && (
+                <div className="bg-emerald-50/60 rounded-xl p-4 border border-emerald-100">
+                  <h4 className="text-xs font-bold text-emerald-800 uppercase tracking-wider mb-1 flex items-center gap-1">
+                    🌾 Farmer's Notes
+                  </h4>
+                  <p className="text-xs text-gray-700 leading-relaxed whitespace-pre-line">
+                    {previewQueueLot.description}
+                  </p>
+                </div>
+              )}
+            </div>
+
+            {/* Modal Footer */}
+            <div className="p-4 border-t border-gray-100 bg-gray-50 flex justify-end">
+              <button
+                type="button"
+                onClick={() => setPreviewQueueLot(null)}
+                className="px-5 py-2 bg-gray-800 hover:bg-gray-900 text-white rounded-xl text-sm font-semibold transition"
+              >
+                Close Preview
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* CSS animation */}
       <style>{`

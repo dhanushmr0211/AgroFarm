@@ -168,9 +168,10 @@ cron.schedule('* * * * *', async () => { // Every minute
     });
 
     for (const auction of auctionsToEnd) {
+      const finalStatus = auction.winningBidId ? 'SOLD' : 'COMPLETED';
       await prisma.produce.update({
         where: { id: auction.id },
-        data: { status: 'COMPLETED' }
+        data: { status: finalStatus }
       });
 
       // Finalize bids: Mark winner as WON, others as LOST

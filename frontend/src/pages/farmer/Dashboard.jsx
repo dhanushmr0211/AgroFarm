@@ -104,10 +104,10 @@ const FarmerDashboard = () => {
 
       const activeListings = produce.filter(p => p.status === 'UPCOMING' || p.status === 'LIVE').length
       const liveAuctions = produce.filter(p => p.status === 'LIVE').length
-      const completedAuctions = produce.filter(p => p.status === 'COMPLETED')
+      const completedAuctions = produce.filter(p => p.status === 'COMPLETED' || p.status === 'SOLD')
       const successRate = produce.length ? Math.round((completedAuctions.length / produce.length) * 100) : 0
 
-      // Calculate real total earnings from completed auctions
+      // Calculate real total earnings from completed and sold auctions
       const totalEarnings = completedAuctions.reduce((sum, auction) => {
         return sum + (auction.winningBid?.amount || auction.currentBid || 0)
       }, 0)
@@ -120,6 +120,26 @@ const FarmerDashboard = () => {
       })
     } catch (error) {
       console.error('Failed to fetch stats:', error)
+    }
+  }
+
+  const handleDeleteProduce = async (produceId, produceTitle) => {
+    if (!window.confirm(`Are you sure you want to delete "${produceTitle || 'this produce'}"? This action cannot be undone.`)) {
+      return
+    }
+
+    try {
+      const response = await api.delete(`/auctions/${produceId}`)
+      if (response.success) {
+        toast.success(response.message || 'Produce deleted successfully')
+        fetchMyProduce()
+        fetchStats()
+      } else {
+        toast.error(response.message || 'Failed to delete produce')
+      }
+    } catch (error) {
+      console.error('Failed to delete produce:', error)
+      toast.error(error.response?.data?.message || error.message || 'Failed to delete produce')
     }
   }
 
@@ -492,37 +512,45 @@ const FarmerDashboard = () => {
                       <p className="text-gray-500">No recent activity</p>
                     </div>
                   ) : (
-                    myProduce.slice(0, 3).map((produce) => (
-                      <div key={produce.id} className="flex items-center justify-between p-4 bg-white border border-gray-100 rounded-lg shadow-sm">
-                        <div className="flex items-center">
-                          <div className={`w-12 h-12 rounded-lg flex items-center justify-center ${produce.status === 'LIVE' ? 'bg-blue-100' :
-                            produce.status === 'COMPLETED' ? 'bg-green-100' : 'bg-yellow-100'
+                    myProduce.slice(0, 3).map((produce) => {
+                      const isSold = produce.status === 'SOLD' || (produce.status === 'COMPLETED' && produce.winningBidId);
+                      return (
+                        <div key={produce.id} className="flex items-center justify-between p-4 bg-white border border-gray-100 rounded-lg shadow-sm">
+                          <div className="flex items-center">
+                            <div className={`w-12 h-12 rounded-lg flex items-center justify-center ${
+                              isSold ? 'bg-emerald-100' :
+                              produce.status === 'LIVE' ? 'bg-blue-100' :
+                              produce.status === 'COMPLETED' ? 'bg-green-100' : 'bg-yellow-100'
                             }`}>
-                            {produce.status === 'LIVE' ? (
-                              <Clock className="w-6 h-6 text-blue-600" />
-                            ) : produce.status === 'COMPLETED' ? (
-                              <Package className="w-6 h-6 text-green-600" />
-                            ) : (
-                              <Package className="w-6 h-6 text-yellow-600" />
-                            )}
-                          </div>
-                          <div className="ml-4">
-                            <p className="font-medium text-gray-900">{produce.title}</p>
-                            <p className="text-sm text-gray-600">
-                              {produce.status === 'LIVE' ? `Live auction • Current Price: ₹${produce.currentBid || produce.basePrice}` :
-                                produce.status === 'COMPLETED' ? `Auction ended • Winning bid: ₹${produce.winningBid?.amount || produce.currentBid}` :
+                              {isSold ? (
+                                <CheckCircle className="w-6 h-6 text-emerald-600" />
+                              ) : produce.status === 'LIVE' ? (
+                                <Clock className="w-6 h-6 text-blue-600" />
+                              ) : (
+                                <Package className="w-6 h-6 text-yellow-600" />
+                              )}
+                            </div>
+                            <div className="ml-4">
+                              <p className="font-medium text-gray-900">{produce.title}</p>
+                              <p className="text-sm text-gray-600">
+                                {isSold ? `Sold • Winning bid: ₹${produce.winningBid?.amount || produce.currentBid}` :
+                                  produce.status === 'LIVE' ? `Live auction • Current Price: ₹${produce.currentBid || produce.basePrice}` :
+                                  produce.status === 'COMPLETED' ? `Auction ended • Unsold` :
                                   `Upcoming • Base price: ₹${produce.basePrice}`}
-                            </p>
+                              </p>
+                            </div>
                           </div>
-                        </div>
-                        <span className={`text-xs font-medium px-2.5 py-0.5 rounded-full ${produce.status === 'LIVE' ? 'bg-blue-100 text-blue-800' :
-                          produce.status === 'COMPLETED' ? 'bg-green-100 text-green-800' :
+                          <span className={`text-xs font-semibold px-2.5 py-0.5 rounded-full ${
+                            isSold ? 'bg-emerald-100 text-emerald-800 border border-emerald-300' :
+                            produce.status === 'LIVE' ? 'bg-blue-100 text-blue-800' :
+                            produce.status === 'COMPLETED' ? 'bg-gray-100 text-gray-800' :
                             'bg-yellow-100 text-yellow-800'
                           }`}>
-                          {produce.status}
-                        </span>
-                      </div>
-                    ))
+                            {isSold ? 'SOLD' : produce.status}
+                          </span>
+                        </div>
+                      );
+                    })
                   )}
                 </div>
               </div>
@@ -556,62 +584,90 @@ const FarmerDashboard = () => {
                       </button>
                     </div>
                   ) : (
-                    myProduce.map((produce) => (
-                      <div key={produce.id} className="bg-white border border-gray-200 rounded-lg p-6 shadow-sm hover:shadow-md transition-shadow">
-                        <div className="flex justify-between items-start mb-4">
-                          <h3 className="text-lg font-semibold text-gray-900">{produce.title}</h3>
-                          <span className={`text-xs font-medium px-2.5 py-0.5 rounded-full ${produce.status === 'LIVE'
-                            ? 'bg-blue-100 text-blue-800'
-                            : produce.status === 'UPCOMING'
-                              ? 'bg-yellow-100 text-yellow-800'
-                              : produce.status === 'COMPLETED'
-                                ? 'bg-green-100 text-green-800'
-                                : 'bg-gray-100 text-gray-800'
-                            }`}>
-                            {produce.status}
-                          </span>
-                        </div>
-                        <div className="space-y-2 text-sm text-gray-600">
-                          <div className="flex justify-between">
-                            <span>Quantity:</span>
-                            <span className="font-medium">{produce.quantity} {produce.unit}</span>
-                          </div>
-                          <div className="flex justify-between">
-                            <span>Quality:</span>
-                            <span className="font-medium">{produce.grade}</span>
-                          </div>
-                          <div className="flex justify-between">
-                            <span>Base Price:</span>
-                            <span className="font-medium text-green-600">₹{produce.basePrice?.toLocaleString()}</span>
-                          </div>
-                          <div className="flex items-center">
-                            <MapPin size={14} className="mr-1" />
-                            <span>{produce.pickupLocation}</span>
-                          </div>
-                          <div className="flex items-center">
-                            <Calendar size={14} className="mr-1" />
-                            <span>{new Date(produce.auctionStartTime).toLocaleString()}</span>
-                          </div>
-                        </div>
-                        {produce.currentBid && (
-                          <div className="mt-4 pt-4 border-t border-gray-100">
-                            <div className="flex justify-between text-sm">
-                              <span className="text-gray-600">Current Bid:</span>
-                              <span className="font-bold text-blue-600">₹{produce.currentBid?.toLocaleString()}</span>
+                    myProduce.map((produce) => {
+                      const isSold = produce.status === 'SOLD' || (produce.status === 'COMPLETED' && produce.winningBidId);
+                      const isLive = produce.status === 'LIVE';
+                      const canDelete = !isSold && !isLive;
+
+                      return (
+                        <div key={produce.id} className="bg-white border border-gray-200 rounded-lg p-6 shadow-sm hover:shadow-md transition-shadow flex flex-col justify-between">
+                          <div>
+                            <div className="flex justify-between items-start mb-4">
+                              <h3 className="text-lg font-semibold text-gray-900">{produce.title}</h3>
+                              <span className={`text-xs font-semibold px-2.5 py-0.5 rounded-full ${
+                                isSold
+                                  ? 'bg-emerald-100 text-emerald-800 border border-emerald-300'
+                                  : isLive
+                                    ? 'bg-blue-100 text-blue-800 animate-pulse'
+                                    : produce.status === 'UPCOMING'
+                                      ? 'bg-yellow-100 text-yellow-800'
+                                      : 'bg-gray-100 text-gray-800'
+                              }`}>
+                                {isSold ? 'SOLD' : produce.status}
+                              </span>
                             </div>
+                            <div className="space-y-2 text-sm text-gray-600">
+                              <div className="flex justify-between">
+                                <span>Quantity:</span>
+                                <span className="font-medium">{produce.quantity} {produce.unit}</span>
+                              </div>
+                              <div className="flex justify-between">
+                                <span>Quality:</span>
+                                <span className="font-medium">{produce.grade}</span>
+                              </div>
+                              <div className="flex justify-between">
+                                <span>Base Price:</span>
+                                <span className="font-medium text-green-600">₹{produce.basePrice?.toLocaleString()}</span>
+                              </div>
+                              <div className="flex items-center">
+                                <MapPin size={14} className="mr-1" />
+                                <span>{produce.pickupLocation}</span>
+                              </div>
+                              <div className="flex items-center">
+                                <Calendar size={14} className="mr-1" />
+                                <span>{new Date(produce.auctionStartTime).toLocaleString()}</span>
+                              </div>
+                            </div>
+                            {(produce.currentBid || produce.winningBid) && (
+                              <div className="mt-4 pt-4 border-t border-gray-100">
+                                <div className="flex justify-between text-sm">
+                                  <span className="text-gray-600">{isSold ? 'Sold Price:' : 'Current Bid:'}</span>
+                                  <span className={`font-bold ${isSold ? 'text-emerald-600' : 'text-blue-600'}`}>
+                                    ₹{(produce.winningBid?.amount || produce.currentBid)?.toLocaleString()}
+                                  </span>
+                                </div>
+                              </div>
+                            )}
                           </div>
-                        )}
-                        {/* Action buttons */}
-                        <div className="mt-4 pt-4 border-t border-gray-100 flex justify-end">
-                          <button
-                            onClick={() => navigate(`/produce/${produce.id}`)}
-                            className="text-sm text-green-600 hover:text-green-800 font-medium"
-                          >
-                            View Details →
-                          </button>
+                          {/* Action buttons */}
+                          <div className="mt-5 pt-4 border-t border-gray-100 flex items-center justify-between">
+                            {canDelete ? (
+                              <button
+                                onClick={() => handleDeleteProduce(produce.id, produce.title)}
+                                className="text-sm flex items-center gap-1.5 text-red-600 hover:text-red-700 hover:bg-red-50 font-medium px-2.5 py-1.5 rounded-md transition-colors"
+                                title="Delete this produce listing"
+                              >
+                                <Trash2 size={15} />
+                                <span>Delete</span>
+                              </button>
+                            ) : (
+                              <span
+                                className="text-xs text-gray-400 italic"
+                                title={isLive ? 'Active in live auction' : 'Sold items cannot be deleted'}
+                              >
+                                {isLive ? 'Active in Live' : 'Sold item'}
+                              </span>
+                            )}
+                            <button
+                              onClick={() => navigate(`/produce/${produce.id}`)}
+                              className="text-sm text-green-600 hover:text-green-800 font-medium hover:underline"
+                            >
+                              View Details →
+                            </button>
+                          </div>
                         </div>
-                      </div>
-                    ))
+                      );
+                    })
                   )}
                 </div>
               </div>

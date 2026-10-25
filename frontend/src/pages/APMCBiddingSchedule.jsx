@@ -234,9 +234,12 @@ const APMCBiddingSchedule = () => {
   const handleRequestSpotClick = (session) => {
     if (user?.role === 'FARMER') {
       setSelectedSessionForRegistration(session);
-      // If farmer already has produce, pre-select the first one if none selected
-      if (farmerProduces.length > 0) {
-        setSelectedProduceId(farmerProduces[0].id);
+      // Pre-select first available (unsold) produce
+      const firstAvailable = farmerProduces.find(
+        p => p.status !== 'SOLD' && !(p.status === 'COMPLETED' && p.winningBidId) && p.status !== 'LIVE'
+      );
+      if (firstAvailable) {
+        setSelectedProduceId(firstAvailable.id);
       } else {
         setSelectedProduceId('');
       }
@@ -271,7 +274,17 @@ const APMCBiddingSchedule = () => {
     
     const chosenProduce = farmerProduces.find(p => p.id === selectedProduceId);
     if (!chosenProduce) {
-      toast.error('Please select a produce to register with this auction session.');
+      toast.error('Please select an available produce to register with this auction session.');
+      return;
+    }
+
+    if (chosenProduce.status === 'SOLD' || (chosenProduce.status === 'COMPLETED' && chosenProduce.winningBidId)) {
+      toast.error('This produce has already been sold and cannot be entered into an auction again.');
+      return;
+    }
+
+    if (chosenProduce.status === 'LIVE') {
+      toast.error('This produce is currently active in another auction.');
       return;
     }
 
@@ -778,19 +791,28 @@ const APMCBiddingSchedule = () => {
 
                 <div className="space-y-2.5 max-h-60 overflow-y-auto pr-1">
                   {farmerProduces.map((prod) => {
+                    const isSold = prod.status === 'SOLD' || (prod.status === 'COMPLETED' && prod.winningBidId);
+                    const isLive = prod.status === 'LIVE';
+                    const isSelectable = !isSold && !isLive;
                     const isSelected = selectedProduceId === prod.id;
+
                     return (
                       <div
                         key={prod.id}
-                        onClick={() => setSelectedProduceId(prod.id)}
-                        className={`p-3.5 rounded-lg border-2 cursor-pointer transition-all flex items-center justify-between ${
-                          isSelected
-                            ? 'border-green-600 bg-green-50/70 shadow-sm'
-                            : 'border-gray-200 hover:border-gray-300 bg-white'
+                        onClick={() => {
+                          if (isSelectable) setSelectedProduceId(prod.id);
+                        }}
+                        className={`p-3.5 rounded-lg border-2 transition-all flex items-center justify-between ${
+                          !isSelectable
+                            ? 'border-gray-200 bg-gray-50 opacity-60 cursor-not-allowed'
+                            : isSelected
+                              ? 'border-green-600 bg-green-50/70 shadow-sm cursor-pointer'
+                              : 'border-gray-200 hover:border-gray-300 bg-white cursor-pointer'
                         }`}
                       >
                         <div className="flex items-center gap-3">
                           <div className={`w-5 h-5 rounded-full border flex items-center justify-center ${
+                            !isSelectable ? 'border-gray-300 bg-gray-200 text-gray-400' :
                             isSelected ? 'border-green-600 bg-green-600 text-white' : 'border-gray-400'
                           }`}>
                             {isSelected && <CheckCircle size={14} />}
@@ -801,6 +823,16 @@ const APMCBiddingSchedule = () => {
                               <span className="text-xs bg-gray-100 text-gray-700 px-2 py-0.5 rounded font-normal">
                                 {prod.category}
                               </span>
+                              {isSold && (
+                                <span className="text-xs bg-emerald-100 text-emerald-800 border border-emerald-300 px-2 py-0.5 rounded font-semibold">
+                                  SOLD • Cannot Re-enter
+                                </span>
+                              )}
+                              {isLive && (
+                                <span className="text-xs bg-blue-100 text-blue-800 px-2 py-0.5 rounded font-medium">
+                                  LIVE AUCTION
+                                </span>
+                              )}
                             </div>
                             <div className="text-xs text-gray-600 mt-1 flex items-center gap-3">
                               <span>📦 {prod.quantity} {prod.unit || 'kg'}</span>

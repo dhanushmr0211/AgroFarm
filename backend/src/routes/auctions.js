@@ -6,16 +6,24 @@ const prisma = require('../config/database');
 const parseImages = (item) => {
   if (!item) return item;
 
-  // Handle single item
-  if (item.produce) { // For nested produce objects (e.g. in bids)
+  // Handle nested produce objects (e.g. in bids)
+  if (item.produce) {
     parseImages(item.produce);
   }
 
   if (typeof item.images === 'string') {
     try {
-      item.images = JSON.parse(item.images);
+      let parsed = JSON.parse(item.images);
+      if (typeof parsed === 'string') {
+        try { parsed = JSON.parse(parsed); } catch (_) {}
+      }
+      item.images = Array.isArray(parsed) ? parsed : (parsed ? [parsed] : []);
     } catch (e) {
-      item.images = [];
+      if (item.images.startsWith('http') || item.images.startsWith('data:') || item.images.startsWith('/')) {
+        item.images = [item.images];
+      } else {
+        item.images = [];
+      }
     }
   } else if (!item.images) {
     item.images = [];
@@ -832,7 +840,7 @@ router.post('/sessions/:id/accept-turn', authenticateToken, async (req, res) => 
 
     const highestBid = activeProduce.bids[0];
 
-    // Mark current produce completed
+    // Mark current produce as SOLD (if bid accepted) or COMPLETED (no bids)
     if (highestBid) {
       await prisma.bid.update({
         where: { id: highestBid.id },
@@ -841,7 +849,7 @@ router.post('/sessions/:id/accept-turn', authenticateToken, async (req, res) => 
       await prisma.produce.update({
         where: { id: activeProduce.id },
         data: {
-          status: 'COMPLETED',
+          status: 'SOLD',
           winningBidId: highestBid.id
         }
       });
@@ -1418,6 +1426,57 @@ router.get('/user/bids', authenticateToken, async (req, res) => {
   }
 });
 
+// Delete produce (farmers only) - can only delete UPCOMING or unsold COMPLETED/CANCELLED produce
+router.delete('/:id', authenticateToken, authorizeRoles('FARMER'), async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    const produce = await prisma.produce.findUnique({
+      where: { id },
+      include: { winningBid: true }
+    });
+
+    if (!produce) {
+      return res.status(404).json({ success: false, message: 'Produce not found' });
+    }
+
+    // Only the farmer who listed it can delete it
+    if (produce.farmerId !== req.user.id) {
+      return res.status(403).json({ success: false, message: 'You can only delete your own produce' });
+    }
+
+    // Cannot delete if currently LIVE in an auction
+    if (produce.status === 'LIVE') {
+      return res.status(400).json({ success: false, message: 'Cannot delete produce that is currently live in an auction' });
+    }
+
+    // Cannot delete if SOLD
+    if (produce.status === 'SOLD') {
+      return res.status(400).json({ success: false, message: 'Cannot delete produce that has been sold' });
+    }
+
+    // Cannot delete if COMPLETED with a winning bid (i.e., was sold)
+    if (produce.status === 'COMPLETED' && produce.winningBidId) {
+      return res.status(400).json({ success: false, message: 'Cannot delete produce that has been sold in an auction' });
+    }
+
+    // Delete associated bids first (to avoid foreign key constraints)
+    await prisma.bid.deleteMany({ where: { produceId: id } });
+
+    // Delete the produce
+    await prisma.produce.delete({ where: { id } });
+
+    res.json({
+      success: true,
+      message: 'Produce deleted successfully'
+    });
+
+  } catch (error) {
+    console.error('Delete produce error:', error);
+    res.status(500).json({ success: false, message: 'Failed to delete produce: ' + error.message });
+  }
+});
+
 // Create new auction (farmers only)
 router.post('/', authenticateToken, authorizeRoles('FARMER'), async (req, res) => {
   try {
@@ -1899,22 +1958,41 @@ router.post('/request-spot', authenticateToken, async (req, res) => {
         }
       });
 
-      if (produce) {
-        finalProductName = produce.title;
-        finalQuantity = Math.round(produce.quantity);
-        finalGrade = produce.grade || finalGrade;
-
-        // Associate produce with this session and update APMC / session timing
-        await prisma.produce.update({
-          where: { id: produce.id },
-          data: {
-            sessionId: session.id,
-            apmcId: session.apmcId,
-            auctionStartTime: session.startTime,
-            auctionEndTime: session.endTime
-          }
+      if (!produce) {
+        return res.status(404).json({
+          success: false,
+          message: 'Selected produce not found'
         });
       }
+
+      if (produce.status === 'SOLD' || (produce.status === 'COMPLETED' && produce.winningBidId)) {
+        return res.status(400).json({
+          success: false,
+          message: 'This produce has already been sold and cannot be entered into an auction again'
+        });
+      }
+
+      if (produce.status === 'LIVE') {
+        return res.status(400).json({
+          success: false,
+          message: 'This produce is currently active in an ongoing auction'
+        });
+      }
+
+      finalProductName = produce.title;
+      finalQuantity = Math.round(produce.quantity);
+      finalGrade = produce.grade || finalGrade;
+
+      // Associate produce with this session and update APMC / session timing
+      await prisma.produce.update({
+        where: { id: produce.id },
+        data: {
+          sessionId: session.id,
+          apmcId: session.apmcId,
+          auctionStartTime: session.startTime,
+          auctionEndTime: session.endTime
+        }
+      });
     }
 
     const booking = await prisma.bookingRequest.create({

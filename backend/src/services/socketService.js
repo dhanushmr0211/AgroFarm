@@ -622,9 +622,10 @@ class SocketService {
       if (produce && produce.status === 'LIVE') {
         console.log(`🛑 Ending auction ${produce.title}...`);
 
+        const finalStatus = produce.winningBidId ? 'SOLD' : 'COMPLETED';
         await prisma.produce.update({
           where: { id: produceId },
-          data: { status: 'COMPLETED' }
+          data: { status: finalStatus }
         });
 
         // Finalize bids
