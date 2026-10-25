@@ -414,29 +414,33 @@ const LiveBidding = () => {
       {/* TURN BANNER & TIMER                                         */}
       {/* ═══════════════════════════════════════════════════════════ */}
       {activeProduce && isSessionLive && (
-        <div className="bg-gradient-to-r from-emerald-600 via-green-600 to-teal-600 text-white">
+        <div className="bg-gradient-to-r from-emerald-700 via-green-700 to-teal-700 text-white">
           <div className="max-w-7xl mx-auto px-4 py-4">
             <div className="flex items-center justify-between flex-wrap gap-3">
               <div className="flex items-center gap-3">
-                <div className="bg-white/20 backdrop-blur-sm rounded-lg px-3 py-1.5">
-                  <span className="text-sm font-bold">Turn {currentTurnIndex} / {totalTurns}</span>
+                <div className="bg-black/25 backdrop-blur-sm rounded-lg px-3 py-1.5">
+                  <span className="text-sm font-bold text-white">Turn {currentTurnIndex} / {totalTurns}</span>
                 </div>
                 <div>
-                  <div className="text-sm font-medium text-green-100">Currently Bidding On</div>
-                  <div className="text-lg font-bold flex items-center gap-2">
+                  <div className="text-sm font-medium text-white/80">Currently Bidding On</div>
+                  <div className="text-lg font-bold flex items-center gap-2 text-white">
                     🌾 {activeProduce.farmer?.name}'s {activeProduce.title}
                   </div>
                 </div>
               </div>
               <div className="flex items-center gap-4">
-                <div className={`text-center bg-white/10 backdrop-blur-sm rounded-xl px-5 py-2 ${
-                  timeRemainingMs <= 30000 ? 'animate-pulse ring-2 ring-red-400' : ''
+                <div className={`text-center bg-black/30 backdrop-blur-sm rounded-xl px-5 py-2 ${
+                  timeRemainingMs <= 30000 ? 'animate-pulse ring-2 ring-red-400 bg-red-900/50' : ''
                 }`}>
-                  <Timer className="h-5 w-5 mx-auto mb-0.5" />
-                  <div className={`text-2xl font-mono font-bold ${timeRemainingMs <= 30000 ? 'text-red-200' : ''}`}>
+                  <Timer className="h-5 w-5 mx-auto mb-0.5 text-yellow-300" />
+                  <div className={`text-2xl font-mono font-bold ${
+                    timeRemainingMs <= 30000 ? 'text-red-300' :
+                    timeRemainingMs <= 60000 ? 'text-orange-300' :
+                    'text-yellow-200'
+                  }`}>
                     {formatTimer(timeRemainingMs)}
                   </div>
-                  <div className="text-[10px] uppercase tracking-widest text-green-200">Remaining</div>
+                  <div className="text-[10px] uppercase tracking-widest text-white/70">Remaining</div>
                 </div>
               </div>
             </div>
