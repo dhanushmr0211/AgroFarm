@@ -455,46 +455,62 @@ const LiveBidding = () => {
       {/* TURN BANNER & TIMER                                         */}
       {/* ═══════════════════════════════════════════════════════════ */}
       {activeProduce && isSessionLive && (
-        <div className="bg-gradient-to-r from-emerald-950 via-teal-900 to-slate-950 text-white shadow-inner border-y border-emerald-500/30">
+        <div 
+          className="bg-gradient-to-r from-emerald-950 via-teal-900 to-slate-950 text-white shadow-inner border-y border-emerald-500/30"
+          style={{ background: 'linear-gradient(135deg, #022c22 0%, #064e3b 50%, #0f172a 100%)', color: '#ffffff' }}
+        >
           <div className="max-w-7xl mx-auto px-4 py-4">
             <div className="flex items-center justify-between flex-wrap gap-4">
               <div className="flex items-center gap-3">
-                <div className="bg-white/10 backdrop-blur-md rounded-xl px-3.5 py-2 border border-white/20 shadow-sm text-center">
-                  <span className="text-[10px] uppercase font-extrabold tracking-wider text-emerald-300 block">Turn</span>
-                  <span className="text-base font-black text-white">{currentTurnIndex} <span className="text-white/60 font-medium text-xs">/ {totalTurns}</span></span>
+                <div 
+                  className="rounded-xl px-3.5 py-2 border shadow-sm text-center"
+                  style={{ backgroundColor: 'rgba(255, 255, 255, 0.12)', borderColor: 'rgba(255, 255, 255, 0.25)' }}
+                >
+                  <span className="text-[10px] uppercase font-extrabold tracking-wider block text-emerald-300" style={{ color: '#6ee7b7' }}>Turn</span>
+                  <span className="text-base font-black text-white" style={{ color: '#ffffff' }}>{currentTurnIndex} <span className="font-medium text-xs text-white/70" style={{ color: 'rgba(255, 255, 255, 0.7)' }}>/ {totalTurns}</span></span>
                 </div>
                 <div>
-                  <div className="text-xs font-semibold uppercase tracking-wider text-emerald-300">Currently Bidding On</div>
-                  <div className="text-xl md:text-2xl font-black text-white flex items-center gap-2 drop-shadow-sm">
-                    🌾 <span>{activeProduce.farmer?.name}'s</span> <span className="text-emerald-300 underline decoration-emerald-400 decoration-2 underline-offset-4">{activeProduce.title}</span>
+                  <div className="text-xs font-semibold uppercase tracking-wider text-emerald-300" style={{ color: '#6ee7b7' }}>Currently Bidding On</div>
+                  <div className="text-xl md:text-2xl font-black text-white flex items-center gap-2 drop-shadow-sm" style={{ color: '#ffffff' }}>
+                    🌾 <span>{activeProduce.farmer?.name}'s</span> <span className="underline decoration-2 underline-offset-4 text-emerald-300" style={{ color: '#6ee7b7' }}>{activeProduce.title}</span>
                   </div>
                 </div>
               </div>
               <div className="flex items-center gap-4">
                 {/* Ultra High-Contrast Timer Box */}
-                <div className={`flex items-center gap-3 bg-black/90 backdrop-blur-md rounded-2xl px-5 py-2.5 border-2 shadow-2xl transition-all ${
-                  timeRemainingMs <= 30000
-                    ? 'border-red-500 bg-red-950/80 animate-pulse ring-4 ring-red-500/30'
-                    : timeRemainingMs <= 60000
-                    ? 'border-amber-400 bg-amber-950/60 ring-2 ring-amber-400/20'
-                    : 'border-emerald-400/80 bg-slate-950/90'
-                }`}>
-                  <div className={`p-2 rounded-xl ${
-                    timeRemainingMs <= 30000 ? 'bg-red-500/20 text-red-400' :
-                    timeRemainingMs <= 60000 ? 'bg-amber-500/20 text-amber-300' :
-                    'bg-emerald-500/20 text-emerald-300'
-                  }`}>
+                <div 
+                  className={`flex items-center gap-3 rounded-2xl px-5 py-2.5 border-2 shadow-2xl transition-all ${
+                    timeRemainingMs <= 30000
+                      ? 'border-red-500 bg-red-950 animate-pulse ring-4 ring-red-500/30'
+                      : timeRemainingMs <= 60000
+                      ? 'border-amber-400 bg-amber-950 ring-2 ring-amber-400/20'
+                      : 'border-emerald-400 bg-slate-950'
+                  }`}
+                  style={{
+                    backgroundColor: timeRemainingMs <= 30000 ? '#450a0a' : timeRemainingMs <= 60000 ? '#451a03' : '#020617',
+                    borderColor: timeRemainingMs <= 30000 ? '#ef4444' : timeRemainingMs <= 60000 ? '#f59e0b' : '#34d399',
+                    boxShadow: '0 10px 25px -5px rgba(0, 0, 0, 0.5)'
+                  }}
+                >
+                  <div 
+                    className="p-2 rounded-xl"
+                    style={{
+                      backgroundColor: timeRemainingMs <= 30000 ? 'rgba(239, 68, 68, 0.2)' : timeRemainingMs <= 60000 ? 'rgba(245, 158, 11, 0.2)' : 'rgba(52, 211, 153, 0.2)',
+                      color: timeRemainingMs <= 30000 ? '#f87171' : timeRemainingMs <= 60000 ? '#fbbf24' : '#6ee7b7'
+                    }}
+                  >
                     <Timer className={`h-6 w-6 ${timeRemainingMs <= 30000 ? 'animate-bounce' : ''}`} />
                   </div>
                   <div className="text-right">
-                    <div className="text-[10px] font-black uppercase tracking-widest text-gray-300">
+                    <div className="text-[10px] font-black uppercase tracking-widest text-gray-300" style={{ color: '#d1d5db' }}>
                       Time Remaining
                     </div>
-                    <div className={`text-3xl font-mono font-black tracking-wider drop-shadow-md ${
-                      timeRemainingMs <= 30000 ? 'text-red-400' :
-                      timeRemainingMs <= 60000 ? 'text-amber-300' :
-                      'text-emerald-300'
-                    }`}>
+                    <div 
+                      className="text-3xl font-mono font-black tracking-wider drop-shadow-md"
+                      style={{
+                        color: timeRemainingMs <= 30000 ? '#f87171' : timeRemainingMs <= 60000 ? '#fbbf24' : '#6ee7b7'
+                      }}
+                    >
                       {formatTimer(timeRemainingMs)}
                     </div>
                   </div>
@@ -534,15 +550,15 @@ const LiveBidding = () => {
                         isActive
                           ? 'bg-emerald-600 text-white border-emerald-700 shadow-md ring-2 ring-emerald-300'
                           : isCompleted
-                          ? 'bg-gray-100 text-gray-600 border-gray-200 hover:bg-gray-200'
-                          : 'bg-blue-50 text-blue-800 border-blue-200 hover:bg-blue-100'
+                          ? 'bg-gray-100 text-gray-700 border-gray-300 hover:bg-gray-200'
+                          : 'bg-blue-50 text-blue-900 border-blue-300 hover:bg-blue-100'
                       } ${isMe ? 'ring-2 ring-amber-400' : ''}`}
                     >
                       {isCompleted && <CheckCircle className="h-3.5 w-3.5 text-gray-500" />}
                       {isActive && <span className="relative flex h-2.5 w-2.5"><span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-white opacity-75"></span><span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-white"></span></span>}
                       {isUpcoming && <Clock className="h-3.5 w-3.5 text-blue-600" />}
-                      <span>
-                        {item.farmer?.name || `Farmer ${idx + 1}`}: {item.title}
+                      <span className={isActive ? 'text-white font-black' : isCompleted ? 'text-gray-700' : 'text-blue-900 font-semibold'}>
+                        {item.farmer?.name || `Farmer ${idx + 1}`}: {item.title || item.category || `Lot #${idx + 1}`}
                         {isMe && ' (You)'}
                       </span>
                       {item.images && item.images.length > 0 && (
