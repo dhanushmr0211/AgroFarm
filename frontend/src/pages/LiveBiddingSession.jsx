@@ -28,7 +28,14 @@ import {
   ShieldCheck,
   Thermometer,
   Sparkles,
-  Info
+  Info,
+  Sprout,
+  Trophy,
+  Megaphone,
+  MessageSquare,
+  ShoppingCart,
+  FastForward,
+  Check
 } from 'lucide-react';
 import { toast } from 'react-hot-toast';
 
@@ -336,8 +343,8 @@ const LiveBidding = () => {
     try {
       const response = await api.post(`/auctions/sessions/${sessionId}/timeout-turn`);
       const msg = response.message || 'Turn timed out.';
-      setAnnouncements(prev => [...prev, { type: 'timeout', message: `⏰ ${msg}`, time: new Date() }]);
-      toast(msg, { icon: '⏰' });
+      setAnnouncements(prev => [...prev, { type: 'timeout', message: msg, time: new Date() }]);
+      toast(msg);
       fetchQueue();
     } catch (error) {
       console.error('Timeout turn error:', error);
@@ -472,7 +479,7 @@ const LiveBidding = () => {
                 <div>
                   <div className="text-xs font-semibold uppercase tracking-wider text-emerald-300" style={{ color: '#6ee7b7' }}>Currently Bidding On</div>
                   <div className="text-xl md:text-2xl font-black text-white flex items-center gap-2 drop-shadow-sm" style={{ color: '#ffffff' }}>
-                    🌾 <span>{activeProduce.farmer?.name}'s</span> <span className="underline decoration-2 underline-offset-4 text-emerald-300" style={{ color: '#6ee7b7' }}>{activeProduce.title}</span>
+                    <Sprout className="h-6 w-6 text-emerald-300 flex-shrink-0" /> <span>{activeProduce.farmer?.name}'s</span> <span className="underline decoration-2 underline-offset-4 text-emerald-300" style={{ color: '#6ee7b7' }}>{activeProduce.title}</span>
                   </div>
                 </div>
               </div>
@@ -596,10 +603,10 @@ const LiveBidding = () => {
               ann.type === 'timeout' ? 'bg-orange-50 text-orange-800 border-orange-200' :
               'bg-blue-50 text-blue-800 border-blue-200'
             }`}>
-              {ann.type === 'accept' && '🎉'}
-              {ann.type === 'timeout' && '⏰'}
-              {ann.type === 'pass' && '⏭️'}
-              {ann.message}
+              {ann.type === 'accept' && <Award className="h-4 w-4 text-emerald-600 flex-shrink-0" />}
+              {ann.type === 'timeout' && <Clock className="h-4 w-4 text-amber-600 flex-shrink-0" />}
+              {ann.type === 'pass' && <FastForward className="h-4 w-4 text-blue-600 flex-shrink-0" />}
+              <span>{ann.message}</span>
             </div>
           ))}
         </div>
@@ -836,8 +843,8 @@ const LiveBidding = () => {
                   {/* Description & Crop Notes */}
                   {activeProduce.description && (
                     <div className="bg-emerald-50/50 rounded-xl p-4 border border-emerald-100">
-                      <h4 className="text-xs font-black uppercase tracking-wider text-emerald-800 mb-1.5 flex items-center gap-1">
-                        🌾 Farmer's Crop Description & Notes
+                      <h4 className="text-xs font-black uppercase tracking-wider text-emerald-800 mb-1.5 flex items-center gap-1.5">
+                        <Sprout className="h-4 w-4 text-emerald-700" /> Farmer's Crop Description & Notes
                       </h4>
                       <p className="text-sm text-gray-700 leading-relaxed whitespace-pre-line">
                         {activeProduce.description}
@@ -911,7 +918,9 @@ const LiveBidding = () => {
                     <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75"></span>
                     <span className="relative inline-flex rounded-full h-3 w-3 bg-green-500"></span>
                   </span>
-                  <h3 className="text-lg font-bold text-green-800">🌾 Your Produce is LIVE!</h3>
+                  <h3 className="text-lg font-bold text-green-800 flex items-center gap-2">
+                    <Sprout className="h-5 w-5 text-green-700" /> Your Produce is LIVE!
+                  </h3>
                 </div>
                 <p className="text-sm text-green-700 mb-5">
                   Buyers are bidding on your {activeProduce?.title}. You can accept the highest bid or wait for better offers.
@@ -989,7 +998,9 @@ const LiveBidding = () => {
             {isSessionCompleted && (
               <div className="bg-white rounded-xl shadow-md border border-gray-200 p-8 text-center">
                 <CheckCircle className="h-12 w-12 text-green-500 mx-auto mb-4" />
-                <h3 className="text-lg font-semibold text-gray-900 mb-2">Session Completed 🎉</h3>
+                <h3 className="text-lg font-semibold text-gray-900 mb-2 flex items-center justify-center gap-2">
+                  Session Completed <Trophy className="h-5 w-5 text-amber-500 inline" />
+                </h3>
                 <p className="text-gray-600 mb-4">All farmer lots in this session have concluded.</p>
                 {queue.length > 0 && (
                   <div className="max-w-md mx-auto text-left space-y-2">
@@ -1000,7 +1011,7 @@ const LiveBidding = () => {
                           <span className="font-medium text-gray-800">{item.farmer?.name}: {item.title}</span>
                         </div>
                         {item.winningBid ? (
-                          <span className="text-green-600 font-bold">₹{item.winningBid.amount} ✓</span>
+                          <span className="text-green-600 font-bold inline-flex items-center gap-1">₹{item.winningBid.amount} <Check className="h-3.5 w-3.5 text-green-600" /></span>
                         ) : (
                           <span className="text-gray-400 text-xs">Unsold</span>
                         )}
@@ -1068,7 +1079,19 @@ const LiveBidding = () => {
                       <div className="font-medium text-gray-900 text-sm truncate">
                         {p.name} {p.id === user?.id && <span className="text-xs text-gray-400">(You)</span>}
                       </div>
-                      <div className="text-xs text-gray-500">{p.role === 'FARMER' ? '🌾 Farmer' : '🛒 Buyer'}</div>
+                      <div className="text-xs text-gray-500 flex items-center gap-1">
+                        {p.role === 'FARMER' ? (
+                          <>
+                            <Sprout className="h-3.5 w-3.5 text-emerald-600" />
+                            <span>Farmer</span>
+                          </>
+                        ) : (
+                          <>
+                            <ShoppingCart className="h-3.5 w-3.5 text-blue-600" />
+                            <span>Buyer</span>
+                          </>
+                        )}
+                      </div>
                     </div>
                   </div>
                 ))}
@@ -1079,7 +1102,7 @@ const LiveBidding = () => {
             <div className="bg-white rounded-xl shadow-md border border-gray-200 flex flex-col h-80">
               <div className="p-4 border-b border-gray-100">
                 <h3 className="text-base font-bold text-gray-900 flex items-center gap-2">
-                  💬 Live Chat
+                  <MessageSquare className="h-4 w-4 text-emerald-600" /> Live Chat
                 </h3>
               </div>
               <div className="flex-1 overflow-y-auto px-4 py-3 space-y-2">
@@ -1090,8 +1113,8 @@ const LiveBidding = () => {
                       : ''
                   }`}>
                     {msg.type === 'ANNOUNCEMENT' || msg.type === 'SYSTEM' ? (
-                      <div className="bg-yellow-50 text-yellow-800 px-3 py-1.5 rounded-lg text-xs font-medium border border-yellow-100 inline-block">
-                        📢 {msg.message}
+                      <div className="bg-yellow-50 text-yellow-800 px-3 py-1.5 rounded-lg text-xs font-medium border border-yellow-100 inline-flex items-center gap-1.5">
+                        <Megaphone className="h-3.5 w-3.5 text-yellow-600 flex-shrink-0" /> {msg.message}
                       </div>
                     ) : (
                       <div className={`p-2.5 rounded-xl ${
@@ -1376,8 +1399,8 @@ const LiveBidding = () => {
               {/* Farmer description */}
               {previewQueueLot.description && (
                 <div className="bg-emerald-50/60 rounded-xl p-4 border border-emerald-100">
-                  <h4 className="text-xs font-bold text-emerald-800 uppercase tracking-wider mb-1 flex items-center gap-1">
-                    🌾 Farmer's Notes
+                  <h4 className="text-xs font-bold text-emerald-800 uppercase tracking-wider mb-1 flex items-center gap-1.5">
+                    <Sprout className="h-4 w-4 text-emerald-700" /> Farmer's Notes
                   </h4>
                   <p className="text-xs text-gray-700 leading-relaxed whitespace-pre-line">
                     {previewQueueLot.description}

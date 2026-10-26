@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import api from '../api';
 import { useAuth } from '../contexts/AuthContext';
 import { connectSocket, getSocket, disconnectSocket } from '../lib/socket';
-import { Calendar, Clock, MapPin, Users, TrendingUp, Plus, CheckCircle, AlertCircle, Sparkles, X, Package, Image as ImageIcon } from 'lucide-react';
+import { Calendar, Clock, MapPin, Users, TrendingUp, Plus, CheckCircle, AlertCircle, Sparkles, X, Package, Image as ImageIcon, Landmark, Sprout, ShoppingCart, BarChart3, Tag } from 'lucide-react';
 import { toast } from 'react-hot-toast';
 import ImageUpload from '../components/ImageUpload';
 
@@ -364,7 +364,7 @@ const APMCBiddingSchedule = () => {
         <div className="flex flex-col md:flex-row md:items-center md:justify-between mb-8 gap-4">
           <div>
             <h1 className="text-3xl font-bold text-gray-900 flex items-center gap-2">
-              <span>🏛️</span> APMC Bidding Schedule
+              <Landmark className="h-8 w-8 text-emerald-700" /> APMC Bidding Schedule
             </h1>
             <p className="text-gray-600 mt-2">
               Book your spot for today's bidding sessions across different APMCs
@@ -407,7 +407,11 @@ const APMCBiddingSchedule = () => {
             </div>
 
             <div className="flex items-center gap-2 text-sm text-gray-600 bg-gray-50 px-3 py-1.5 rounded-md border border-gray-200 self-start sm:self-auto">
-              {user?.role === 'FARMER' ? '🌾 Farmer Portal View' : '🛒 Buyer Portal View'}
+              {user?.role === 'FARMER' ? (
+                <span className="flex items-center gap-1.5 font-medium text-emerald-800"><Sprout className="h-4 w-4 text-emerald-600" /> Farmer Portal View</span>
+              ) : (
+                <span className="flex items-center gap-1.5 font-medium text-blue-800"><ShoppingCart className="h-4 w-4 text-blue-600" /> Buyer Portal View</span>
+              )}
             </div>
           </div>
         </div>
@@ -509,7 +513,7 @@ const APMCBiddingSchedule = () => {
                         onClick={() => handleViewBidHistory(schedule.id)}
                         className="flex-1 bg-gray-100 text-gray-800 hover:bg-gray-200 border border-gray-300 px-4 py-2.5 rounded-lg transition-colors font-medium text-sm flex items-center justify-center gap-1.5"
                       >
-                        <span>📊</span> Bid History
+                        <BarChart3 size={16} className="text-gray-600" /> Bid History
                       </button>
                     </div>
                   </div>
@@ -528,8 +532,8 @@ const APMCBiddingSchedule = () => {
           <p className="text-gray-600 mb-5 max-w-md mx-auto text-sm">
             Register with a new APMC to expand your trading reach and access scheduled bidding sessions.
           </p>
-          <button className="bg-purple-600 hover:bg-purple-700 text-white font-medium px-6 py-2.5 rounded-lg shadow transition-colors">
-            🏛️ Register with New APMC
+          <button className="bg-purple-600 hover:bg-purple-700 text-white font-medium px-6 py-2.5 rounded-lg shadow transition-colors inline-flex items-center gap-2">
+            <Landmark size={18} /> Register with New APMC
           </button>
         </div>
       </div>
@@ -543,7 +547,7 @@ const APMCBiddingSchedule = () => {
             <div className="flex justify-between items-start border-b border-gray-100 pb-4 mb-6">
               <div>
                 <h2 className="text-2xl font-bold text-gray-900 flex items-center gap-2">
-                  <span>🌾</span> List Your Produce
+                  <Sprout className="h-6 w-6 text-emerald-600" /> List Your Produce
                 </h2>
                 <p className="text-gray-600 text-sm mt-1">
                   Enter your produce details. Once listed, you can select it to register for any auction session.
@@ -728,7 +732,7 @@ const APMCBiddingSchedule = () => {
             <div className="flex justify-between items-start border-b border-gray-100 pb-4 mb-5">
               <div>
                 <h2 className="text-xl font-bold text-gray-900 flex items-center gap-2">
-                  <span>🌾</span> Select Produce to Register
+                  <Sprout className="h-5 w-5 text-emerald-600" /> Select Produce to Register
                 </h2>
                 {selectedSessionForRegistration && (
                   <p className="text-sm text-gray-600 mt-1">
@@ -835,8 +839,8 @@ const APMCBiddingSchedule = () => {
                               )}
                             </div>
                             <div className="text-xs text-gray-600 mt-1 flex items-center gap-3">
-                              <span>📦 {prod.quantity} {prod.unit || 'kg'}</span>
-                              <span>🏷️ Grade {prod.grade || 'A'}</span>
+                              <span className="inline-flex items-center gap-1"><Package size={12} className="text-gray-500" /> {prod.quantity} {prod.unit || 'kg'}</span>
+                              <span className="inline-flex items-center gap-1"><Tag size={12} className="text-gray-500" /> Grade {prod.grade || 'A'}</span>
                               <span className="font-semibold text-green-700">₹{prod.basePrice}</span>
                             </div>
                           </div>

@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import api from '../../api';
 import { useAuth } from '../../contexts/AuthContext';
 import { toast } from 'react-hot-toast';
+import { Gavel, Trophy, Wallet, BarChart3, Calendar, Radio } from 'lucide-react';
 
 const Dashboard = () => {
   const navigate = useNavigate();
@@ -108,10 +109,10 @@ const Dashboard = () => {
   }
 
   const statCards = [
-    { title: 'Active Bids', value: stats.activeBids, icon: '📝', color: 'bg-blue-500' },
-    { title: 'Won Auctions', value: stats.wonBids, icon: '🏆', color: 'bg-green-500' },
-    { title: 'Total Spent', value: formatCurrency(stats.totalSpent), icon: '💰', color: 'bg-purple-500' },
-    { title: 'Success Rate', value: stats.successRate, icon: '📊', color: 'bg-orange-500' }
+    { title: 'Active Bids', value: stats.activeBids, icon: Gavel, color: 'bg-blue-500' },
+    { title: 'Won Auctions', value: stats.wonBids, icon: Trophy, color: 'bg-green-500' },
+    { title: 'Total Spent', value: formatCurrency(stats.totalSpent), icon: Wallet, color: 'bg-purple-500' },
+    { title: 'Success Rate', value: stats.successRate, icon: BarChart3, color: 'bg-orange-500' }
   ];
 
   return (
@@ -125,19 +126,22 @@ const Dashboard = () => {
 
         {/* Stats Grid */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
-          {statCards.map((stat, index) => (
-            <div key={index} className="bg-white p-6 rounded-xl shadow-lg border border-gray-100">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-sm font-medium text-gray-600">{stat.title}</p>
-                  <p className="text-2xl font-bold text-gray-900 mt-1">{stat.value}</p>
-                </div>
-                <div className={`${stat.color} p-3 rounded-lg text-white`}>
-                  <span className="text-2xl">{stat.icon}</span>
+          {statCards.map((stat, index) => {
+            const Icon = stat.icon;
+            return (
+              <div key={index} className="bg-white p-6 rounded-xl shadow-lg border border-gray-100">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-sm font-medium text-gray-600">{stat.title}</p>
+                    <p className="text-2xl font-bold text-gray-900 mt-1">{stat.value}</p>
+                  </div>
+                  <div className={`${stat.color} p-3 rounded-lg text-white`}>
+                    <Icon className="h-6 w-6" />
+                  </div>
                 </div>
               </div>
-            </div>
-          ))}
+            );
+          })}
         </div>
 
         {/* Navigation Tabs */}
@@ -145,25 +149,28 @@ const Dashboard = () => {
           <div className="border-b border-gray-200">
             <nav className="flex space-x-8 px-6 overflow-x-auto" style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }} aria-label="Tabs">
               {[
-                { id: 'overview', name: 'Overview', icon: '📊' },
-                { id: 'active-bids', name: 'Active Bids', icon: '📝' },
-                { id: 'won-auctions', name: 'Won Auctions', icon: '🏆' },
-                { id: 'live-auctions', name: 'Live Sessions', icon: '🔴' }
-              ].map((tab) => (
-                <button
-                  key={tab.id}
-                  onClick={() => setActiveTab(tab.id)}
-                  className={`${activeTab === tab.id
-                    ? 'border-green-500 text-green-600'
-                    : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
-                    } whitespace-nowrap flex-shrink-0 py-4 px-1 border-b-2 font-medium text-sm flex items-center space-x-2`}
-                >
-                  <span>{tab.icon}</span>
-                  <span>{tab.name}</span>
-                </button>
-              ))}
+                { id: 'overview', name: 'Overview', icon: BarChart3 },
+                { id: 'active-bids', name: 'Active Bids', icon: Gavel },
+                { id: 'won-auctions', name: 'Won Auctions', icon: Trophy },
+                { id: 'live-auctions', name: 'Live Sessions', icon: Radio }
+              ].map((tab) => {
+                const TabIcon = tab.icon;
+                return (
+                  <button
+                    key={tab.id}
+                    onClick={() => setActiveTab(tab.id)}
+                    className={`${activeTab === tab.id
+                      ? 'border-green-500 text-green-600'
+                      : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                      } whitespace-nowrap flex-shrink-0 py-4 px-1 border-b-2 font-medium text-sm flex items-center space-x-2`}
+                  >
+                    <TabIcon className="h-4 w-4" />
+                    <span>{tab.name}</span>
+                  </button>
+                );
+              })}
             </nav>
-          </div>
+        </div>
 
           <div className="p-6">
             {/* Overview Tab */}
@@ -178,21 +185,21 @@ const Dashboard = () => {
                         onClick={() => navigate('/apmc-schedule')}
                         className="w-full bg-green-600 text-white px-4 py-3 rounded-lg hover:bg-green-700 transition-colors flex items-center justify-center space-x-2"
                       >
-                        <span>🗓️</span>
+                        <Calendar className="h-5 w-5" />
                         <span>Find Auction Sessions</span>
                       </button>
                       <button
                         onClick={() => navigate('/wallet')}
                         className="w-full bg-purple-600 text-white px-4 py-3 rounded-lg hover:bg-purple-700 transition-colors flex items-center justify-center space-x-2"
                       >
-                        <span>💰</span>
+                        <Wallet className="h-5 w-5" />
                         <span>Add Funds to Wallet</span>
                       </button>
                       <button
                         onClick={() => setActiveTab('live-auctions')}
                         className="w-full bg-orange-600 text-white px-4 py-3 rounded-lg hover:bg-orange-700 transition-colors flex items-center justify-center space-x-2"
                       >
-                        <span>🔴</span>
+                        <Radio className="h-5 w-5" />
                         <span>Browse Live Sessions</span>
                       </button>
                     </div>
@@ -204,7 +211,9 @@ const Dashboard = () => {
                     <div className="space-y-3">
                       {wonAuctions.length > 0 ? wonAuctions.slice(0, 3).map((order) => (
                         <div key={order.id} className="flex items-start space-x-3 p-3 bg-gray-50 rounded-lg">
-                          <div className="text-2xl">🏆</div>
+                          <div className="p-2 rounded-lg bg-emerald-100 text-emerald-700">
+                            <Trophy className="h-5 w-5" />
+                          </div>
                           <div className="flex-1">
                             <p className="text-sm text-gray-800">You won <b>{order.produce?.title}</b></p>
                             <p className="text-xs text-gray-500 mt-1">{new Date(order.createdAt).toLocaleDateString()}</p>
@@ -341,8 +350,8 @@ const Dashboard = () => {
                       <div key={session.id} className="bg-white border border-gray-200 rounded-lg p-6 hover:shadow-lg transition-shadow">
                         <div className="flex items-center justify-between mb-4">
                           <h4 className="text-lg font-semibold text-gray-900">{session.apmc?.name || 'Unknown APMC'}</h4>
-                          <span className="bg-red-100 text-red-800 text-xs font-medium px-2.5 py-0.5 rounded-full">
-                            🔴 LIVE
+                          <span className="inline-flex items-center gap-1.5 bg-red-100 text-red-800 text-xs font-semibold px-2.5 py-0.5 rounded-full">
+                            <span className="h-2 w-2 rounded-full bg-red-500 animate-pulse"></span> LIVE
                           </span>
                         </div>
                         <div className="space-y-2 mb-4">

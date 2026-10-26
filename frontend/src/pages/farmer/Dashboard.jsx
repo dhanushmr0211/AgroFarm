@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../../contexts/AuthContext'
-import { Plus, Package, DollarSign, Clock, TrendingUp, MapPin, X, Trash2, Star, Calendar, Users, Bell, CheckCircle, AlertCircle } from 'lucide-react'
+import { Plus, Package, DollarSign, Clock, TrendingUp, MapPin, X, Trash2, Star, Calendar, Users, Bell, CheckCircle, AlertCircle, Sprout, Landmark, XCircle, FileText } from 'lucide-react'
 import api from '../../api'
 import toast from 'react-hot-toast'
 import ImageUpload from '../../components/ImageUpload'
@@ -330,7 +330,7 @@ const FarmerDashboard = () => {
           <div className="flex justify-between items-center">
             <div>
               <h1 className="text-3xl font-bold text-gray-900">
-                Welcome back, {user?.name}! 🚜
+                Welcome back, {user?.name}!
               </h1>
               <p className="text-gray-600 mt-2">
                 Manage your produce and track your auctions
@@ -910,8 +910,9 @@ const FarmerDashboard = () => {
                             <h3 className="text-lg font-semibold text-gray-900">
                               {booking.apmc?.name || 'Unknown APMC'}
                             </h3>
-                            <p className="text-sm text-gray-600">
-                              📍 {booking.apmc?.location || 'Location not available'}
+                            <p className="text-sm text-gray-600 flex items-center gap-1 mt-0.5">
+                              <MapPin className="h-3.5 w-3.5 text-gray-400" />
+                              <span>{booking.apmc?.location || 'Location not available'}</span>
                             </p>
                           </div>
                           <span className={`px-3 py-1 rounded-full text-sm font-medium ${booking.status === 'APPROVED'
@@ -955,17 +956,19 @@ const FarmerDashboard = () => {
                         </div>
 
                         {booking.status === 'APPROVED' && (
-                          <div className="mt-4 p-3 bg-green-50 rounded-lg">
+                          <div className="mt-4 p-3 bg-green-50 rounded-lg flex items-center gap-2">
+                            <CheckCircle className="h-4 w-4 text-green-700 flex-shrink-0" />
                             <p className="text-sm text-green-800 font-medium">
-                              ✅ Your booking has been approved! You can now list your produce for auction.
+                              Your booking has been approved! You can now list your produce for auction.
                             </p>
                           </div>
                         )}
 
                         {booking.status === 'REJECTED' && (
-                          <div className="mt-4 p-3 bg-red-50 rounded-lg">
+                          <div className="mt-4 p-3 bg-red-50 rounded-lg flex items-center gap-2">
+                            <XCircle className="h-4 w-4 text-red-700 flex-shrink-0" />
                             <p className="text-sm text-red-800 font-medium">
-                              ❌ Your booking was rejected. Please contact the APMC for more information.
+                              Your booking was rejected. Please contact the APMC for more information.
                             </p>
                           </div>
                         )}
@@ -985,7 +988,9 @@ const FarmerDashboard = () => {
           <div className="relative top-20 mx-auto p-5 border w-96 shadow-lg rounded-md bg-white">
             <div className="mt-3">
               <div className="flex justify-between items-center mb-4">
-                <h3 className="text-lg font-medium text-gray-900">🌾 Add New Produce</h3>
+                <h3 className="text-lg font-medium text-gray-900 flex items-center gap-2">
+                  <Sprout className="h-5 w-5 text-green-600" /> Add New Produce
+                </h3>
                 <button
                   onClick={() => setShowAddProduceModal(false)}
                   className="text-gray-400 hover:text-gray-600"
@@ -1004,13 +1009,13 @@ const FarmerDashboard = () => {
                     required
                   >
                     <option value="">Select produce</option>
-                    <option value="Tomato">🍅 Tomato</option>
-                    <option value="Onion">🧅 Onion</option>
-                    <option value="Potato">🥔 Potato</option>
-                    <option value="Wheat">🌾 Wheat</option>
-                    <option value="Rice">🌾 Rice</option>
-                    <option value="Cotton">🌿 Cotton</option>
-                    <option value="Sugarcane">🎋 Sugarcane</option>
+                    <option value="Tomato">Tomato</option>
+                    <option value="Onion">Onion</option>
+                    <option value="Potato">Potato</option>
+                    <option value="Wheat">Wheat</option>
+                    <option value="Rice">Rice</option>
+                    <option value="Cotton">Cotton</option>
+                    <option value="Sugarcane">Sugarcane</option>
                   </select>
                 </div>
 
@@ -1063,7 +1068,7 @@ const FarmerDashboard = () => {
                     <option value="">Select APMC</option>
                     {apmcs.map((apmc) => (
                       <option key={apmc.id} value={apmc.id}>
-                        🏛️ {apmc.name} - {apmc.location}
+                        {apmc.name} — {apmc.location}
                       </option>
                     ))}
                   </select>
@@ -1120,7 +1125,9 @@ const FarmerDashboard = () => {
                         Adding...
                       </div>
                     ) : (
-                      <>📝 List Produce</>
+                      <span className="flex items-center justify-center gap-2">
+                        <FileText className="h-4 w-4" /> List Produce
+                      </span>
                     )}
                   </button>
                   <button

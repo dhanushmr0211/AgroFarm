@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useParams } from 'react-router-dom';
 import api from '../api';
 import { connectSocket, getSocket, disconnectSocket } from '../lib/socket';
+import { User, Star, Lightbulb } from 'lucide-react';
 
 const LiveAuction = () => {
   const { id } = useParams();
@@ -250,15 +251,15 @@ const LiveAuction = () => {
               <h2 className="text-xl font-semibold text-gray-900 mb-4">Farmer Information</h2>
               <div className="flex items-center space-x-4">
                 <div className="w-16 h-16 bg-green-100 rounded-full flex items-center justify-center">
-                  <span className="text-2xl">👨‍🌾</span>
+                  <User className="h-8 w-8 text-green-700" />
                 </div>
                 <div>
                   <h3 className="text-lg font-medium text-gray-900">{auction.farmer.name}</h3>
                   <p className="text-gray-600">{auction.farmer.location}</p>
                   <div className="flex items-center space-x-4 mt-2">
-                    <div className="flex items-center">
-                      <span className="text-yellow-400">⭐</span>
-                      <span className="text-sm font-medium text-gray-700 ml-1">{auction.farmer.rating}</span>
+                    <div className="flex items-center gap-1">
+                      <Star className="h-4 w-4 fill-amber-400 text-amber-400" />
+                      <span className="text-sm font-medium text-gray-700">{auction.farmer.rating}</span>
                     </div>
                     <div className="text-sm text-gray-600">
                       {auction.farmer.totalSales} successful sales
@@ -329,7 +330,7 @@ const LiveAuction = () => {
 
               <div className="mt-4 p-3 bg-blue-50 rounded-lg">
                 <div className="flex items-center space-x-2">
-                  <span className="text-blue-600">💡</span>
+                  <Lightbulb className="h-4 w-4 text-blue-600 flex-shrink-0" />
                   <span className="text-sm text-blue-800">
                     Funds will be held in escrow until delivery confirmation
                   </span>

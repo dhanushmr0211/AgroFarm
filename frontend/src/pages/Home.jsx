@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react'
 import { Link } from 'react-router-dom'
 import { useAuth } from '../contexts/AuthContext'
-import { Tractor, ShoppingCart, Clock, DollarSign, Users, TrendingUp, ArrowRight, MapPin, Calendar } from 'lucide-react'
+import { Tractor, ShoppingCart, Clock, DollarSign, Users, TrendingUp, ArrowRight, MapPin, Calendar, Sprout } from 'lucide-react'
 import api from '../api'
 import toast from 'react-hot-toast'
 
@@ -67,8 +67,8 @@ const Home = () => {
 
         <div className="relative z-20 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 w-full">
           <div className="max-w-3xl animate-fade-in-up">
-            <span className="inline-block py-1 px-3 rounded-full bg-primary-500/20 backdrop-blur-sm border border-primary-400/30 text-primary-200 text-sm font-medium mb-6">
-              🌱 Revolutionizing Agriculture
+            <span className="inline-flex items-center gap-1.5 py-1 px-3.5 rounded-full bg-primary-500/20 backdrop-blur-sm border border-primary-400/30 text-primary-200 text-sm font-medium mb-6">
+              <Sprout className="h-4 w-4 text-primary-400" /> Revolutionizing Agriculture
             </span>
             <h1 className="text-5xl md:text-7xl font-bold text-white mb-6 leading-tight drop-shadow-lg font-serif">
               Cultivating Trust,<br />
@@ -269,7 +269,7 @@ const Home = () => {
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex flex-col md:flex-row justify-between items-center gap-6">
             <div className="flex items-center space-x-3">
-              <span className="text-3xl">🌾</span>
+              <Sprout className="h-8 w-8 text-green-500" />
               <span className="text-2xl font-bold font-serif text-white">FarmerBid</span>
             </div>
             <div className="text-gray-300 text-base font-medium">
