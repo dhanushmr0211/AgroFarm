@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../../contexts/AuthContext'
-import { Plus, Package, DollarSign, Clock, TrendingUp, MapPin, X, Trash2, Star, Calendar, Users, Bell, CheckCircle, AlertCircle, Sprout, Landmark, XCircle, FileText } from 'lucide-react'
+import { Plus, Package, DollarSign, Clock, TrendingUp, MapPin, X, Trash2, Star, Calendar, Users, Bell, CheckCircle, AlertCircle, Sprout, Landmark, XCircle, FileText, RefreshCw, Award, Check } from 'lucide-react'
 import api from '../../api'
 import toast from 'react-hot-toast'
 import ImageUpload from '../../components/ImageUpload'
@@ -42,32 +42,45 @@ const FarmerDashboard = () => {
   const [myLiveSessions, setMyLiveSessions] = useState([])
   const [loadingMyLiveSessions, setLoadingMyLiveSessions] = useState(false)
 
-  useEffect(() => {
-    fetchAPMCs()
-    fetchMyProduce()
-    fetchStats()
-    fetchNotifications()
-    fetchBookingRequests()
-    fetchMyLiveSessions()
+  const [refreshing, setRefreshing] = useState(false)
+  const [selectedProduceModal, setSelectedProduceModal] = useState(null)
 
-    // Auto-refresh every 30 seconds
+  useEffect(() => {
+    refreshAll()
+
+    // Auto-refresh every 20 seconds
     const interval = setInterval(() => {
-      fetchMyLiveSessions()
-      fetchNotifications()
-      fetchBookingRequests()
-    }, 30000)
+      refreshAll(true)
+    }, 20000)
 
     return () => clearInterval(interval)
   }, [])
+
+  const refreshAll = async (isBackground = false) => {
+    if (!isBackground) setRefreshing(true)
+    try {
+      await Promise.all([
+        fetchAPMCs(),
+        fetchMyProduce(),
+        fetchStats(),
+        fetchNotifications(),
+        fetchBookingRequests(),
+        fetchMyLiveSessions()
+      ])
+    } finally {
+      if (!isBackground) setRefreshing(false)
+    }
+  }
 
   const fetchMyLiveSessions = async () => {
     try {
       setLoadingMyLiveSessions(true)
       // Fetch only this farmer's APPROVED booking requests
       const response = await api.get('/auctions/farmer/booking-requests')
-      if (response.success && response.data) {
+      const data = response?.data || response
+      if (Array.isArray(data)) {
         // Filter only APPROVED bookings whose sessions are currently LIVE
-        const liveApproved = response.data.filter(req =>
+        const liveApproved = data.filter(req =>
           req.status === 'APPROVED' && req.session && req.session.status === 'LIVE'
         )
         setMyLiveSessions(liveApproved)
@@ -82,7 +95,7 @@ const FarmerDashboard = () => {
   const fetchAPMCs = async () => {
     try {
       const response = await api.get('/auth/apmcs')
-      setApmcs(response.data || [])
+      setApmcs(response?.data || response || [])
     } catch (error) {
       console.error('Failed to fetch APMCs:', error)
     }
@@ -90,8 +103,9 @@ const FarmerDashboard = () => {
 
   const fetchMyProduce = async () => {
     try {
-      const response = await api.get('/auctions/farmer/auctions')
-      setMyProduce(response.data || [])
+      const response = await api.get('/auctions/farmer/auctions?limit=100')
+      const items = response?.data || response || []
+      setMyProduce(Array.isArray(items) ? items : [])
     } catch (error) {
       console.error('Failed to fetch produce:', error)
     }
@@ -99,23 +113,41 @@ const FarmerDashboard = () => {
 
   const fetchStats = async () => {
     try {
-      const response = await api.get('/auctions/farmer/auctions')
-      const produce = response.data || []
+      // 1. Try server dashboard-stats first
+      let serverStats = null
+      try {
+        const statsRes = await api.get('/users/dashboard-stats')
+        serverStats = statsRes?.data || statsRes
+      } catch (err) {
+        console.warn('Direct server stats fetch error, falling back to client computation', err)
+      }
 
-      const activeListings = produce.filter(p => p.status === 'UPCOMING' || p.status === 'LIVE').length
-      const liveAuctions = produce.filter(p => p.status === 'LIVE').length
-      const completedAuctions = produce.filter(p => p.status === 'COMPLETED' || p.status === 'SOLD')
-      const successRate = produce.length ? Math.round((completedAuctions.length / produce.length) * 100) : 0
+      // 2. Also fetch farmer produce list with limit=100 to compute client-side totals
+      const response = await api.get('/auctions/farmer/auctions?limit=100')
+      const produce = response?.data || response || []
+      const produceList = Array.isArray(produce) ? produce : []
 
-      // Calculate real total earnings from completed and sold auctions
-      const totalEarnings = completedAuctions.reduce((sum, auction) => {
-        return sum + (auction.winningBid?.amount || auction.currentBid || 0)
+      const activeListings = produceList.filter(p => p.status === 'UPCOMING' || p.status === 'LIVE').length
+      const liveAuctions = produceList.filter(p => p.status === 'LIVE').length
+      const completedAuctions = produceList.filter(p => p.status === 'COMPLETED' || p.status === 'SOLD')
+      const soldAuctions = produceList.filter(p => p.status === 'SOLD' || (p.status === 'COMPLETED' && (p.winningBidId || p.winningBid)))
+      
+      const successRate = produceList.length ? Math.round((soldAuctions.length / produceList.length) * 100) : 0
+
+      // Calculate total earnings from sold and completed auctions
+      const localEarnings = produceList.reduce((sum, item) => {
+        const isSold = item.status === 'SOLD' || (item.status === 'COMPLETED' && (item.winningBidId || item.winningBid))
+        if (!isSold) return sum
+        const amount = item.winningBid?.amount || item.currentBid || 0
+        return sum + Number(amount)
       }, 0)
 
+      const finalEarnings = serverStats?.totalEarnings ? Math.max(serverStats.totalEarnings, localEarnings) : localEarnings
+
       setStats({
-        activeListings,
-        liveAuctions,
-        totalEarnings,
+        activeListings: serverStats?.liveAuctions !== undefined ? (serverStats.totalAuctions - (serverStats.completedAuctions || 0)) : activeListings,
+        liveAuctions: serverStats?.liveAuctions !== undefined ? serverStats.liveAuctions : liveAuctions,
+        totalEarnings: finalEarnings,
         successRate
       })
     } catch (error) {
@@ -337,22 +369,35 @@ const FarmerDashboard = () => {
               </p>
             </div>
 
-            {/* Notifications Bell */}
-            <div className="relative">
+            <div className="flex items-center gap-3">
+              {/* Refresh Button */}
               <button
-                onClick={() => setActiveTab('notifications')}
-                className={`p-2 rounded-full ${activeTab === 'notifications'
-                  ? 'bg-green-100 text-green-600'
-                  : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
-                  } transition-colors`}
+                onClick={() => refreshAll(false)}
+                disabled={refreshing}
+                title="Refresh dashboard stats and listings"
+                className="flex items-center gap-2 px-3.5 py-2 bg-white border border-gray-300 rounded-lg text-sm font-medium text-gray-700 hover:bg-gray-50 shadow-sm transition-all disabled:opacity-50"
               >
-                <Bell className="h-6 w-6" />
-                {unreadCount > 0 && (
-                  <span className="absolute -top-1 -right-1 bg-red-500 text-white text-xs rounded-full h-5 w-5 flex items-center justify-center">
-                    {unreadCount > 9 ? '9+' : unreadCount}
-                  </span>
-                )}
+                <RefreshCw className={`h-4 w-4 text-green-600 ${refreshing ? 'animate-spin' : ''}`} />
+                <span className="hidden sm:inline">{refreshing ? 'Refreshing...' : 'Refresh'}</span>
               </button>
+
+              {/* Notifications Bell */}
+              <div className="relative">
+                <button
+                  onClick={() => setActiveTab('notifications')}
+                  className={`p-2 rounded-full ${activeTab === 'notifications'
+                    ? 'bg-green-100 text-green-600'
+                    : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                    } transition-colors`}
+                >
+                  <Bell className="h-6 w-6" />
+                  {unreadCount > 0 && (
+                    <span className="absolute -top-1 -right-1 bg-red-500 text-white text-xs rounded-full h-5 w-5 flex items-center justify-center">
+                      {unreadCount > 9 ? '9+' : unreadCount}
+                    </span>
+                  )}
+                </button>
+              </div>
             </div>
           </div>
         </div>
@@ -659,10 +704,12 @@ const FarmerDashboard = () => {
                               </span>
                             )}
                             <button
-                              onClick={() => navigate(`/produce/${produce.id}`)}
-                              className="text-sm text-green-600 hover:text-green-800 font-medium hover:underline"
+                              type="button"
+                              onClick={() => setSelectedProduceModal(produce)}
+                              className="text-sm text-green-600 hover:text-green-800 font-medium hover:underline flex items-center gap-1 cursor-pointer"
                             >
-                              View Details →
+                              <span>View Details</span>
+                              <span>→</span>
                             </button>
                           </div>
                         </div>
@@ -789,16 +836,143 @@ const FarmerDashboard = () => {
               </div>
             )}
 
-            {activeTab === 'history' && (
-              <div>
-                <h2 className="text-xl font-semibold text-gray-900 mb-6">Auction History</h2>
-                <div className="text-center py-12 text-gray-500">
-                  <TrendingUp className="w-16 h-16 mx-auto mb-4 text-gray-400" />
-                  <h3 className="text-lg font-medium text-gray-900 mb-2">No auction history</h3>
-                  <p className="text-gray-600">Your completed auctions will be shown here</p>
+            {activeTab === 'history' && (() => {
+              const historyItems = myProduce.filter(p =>
+                p.status === 'SOLD' ||
+                p.status === 'COMPLETED' ||
+                p.winningBidId ||
+                p.winningBid
+              );
+
+              const totalEarnedInHistory = historyItems.reduce((acc, p) => {
+                const amount = p.winningBid?.amount || p.currentBid || 0;
+                return acc + Number(amount);
+              }, 0);
+
+              return (
+                <div>
+                  <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-6">
+                    <div>
+                      <h2 className="text-xl font-bold text-gray-900">Auction History</h2>
+                      <p className="text-sm text-gray-500 mt-1">
+                        Track all your completed and finalized auctions, winning bids, and lot revenues.
+                      </p>
+                    </div>
+                    {historyItems.length > 0 && (
+                      <div className="flex items-center gap-3">
+                        <div className="bg-emerald-50 border border-emerald-200 px-4 py-2 rounded-lg text-right">
+                          <p className="text-xs text-emerald-700 font-semibold uppercase tracking-wider">Completed Lots</p>
+                          <p className="text-lg font-bold text-emerald-900">{historyItems.length}</p>
+                        </div>
+                        <div className="bg-green-50 border border-green-200 px-4 py-2 rounded-lg text-right">
+                          <p className="text-xs text-green-700 font-semibold uppercase tracking-wider">Total Realized</p>
+                          <p className="text-lg font-bold text-green-900">₹{totalEarnedInHistory.toLocaleString()}</p>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+
+                  {historyItems.length === 0 ? (
+                    <div className="text-center py-16 bg-white rounded-xl border border-gray-100 shadow-sm">
+                      <TrendingUp className="w-16 h-16 mx-auto mb-4 text-gray-400" />
+                      <h3 className="text-lg font-bold text-gray-900 mb-2">No auction history yet</h3>
+                      <p className="text-gray-500 max-w-md mx-auto mb-6">
+                        Once an auction for your produce is completed and won by a buyer, the finalized lot details and winning amount will appear right here.
+                      </p>
+                      <button
+                        onClick={() => setActiveTab('produce')}
+                        className="bg-green-600 text-white px-5 py-2.5 rounded-lg font-semibold hover:bg-green-700 transition-colors inline-flex items-center gap-2"
+                      >
+                        <Package className="w-4 h-4" />
+                        View My Produce Listings
+                      </button>
+                    </div>
+                  ) : (
+                    <div className="bg-white border border-gray-200 rounded-xl overflow-hidden shadow-sm">
+                      <div className="overflow-x-auto">
+                        <table className="min-w-full divide-y divide-gray-200">
+                          <thead className="bg-gray-50">
+                            <tr>
+                              <th className="px-6 py-3.5 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Produce Lot</th>
+                              <th className="px-6 py-3.5 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Quantity</th>
+                              <th className="px-6 py-3.5 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Base Price</th>
+                              <th className="px-6 py-3.5 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Winning Price</th>
+                              <th className="px-6 py-3.5 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Winner / Buyer</th>
+                              <th className="px-6 py-3.5 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Outcome</th>
+                              <th className="px-6 py-3.5 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Completed On</th>
+                            </tr>
+                          </thead>
+                          <tbody className="bg-white divide-y divide-gray-200">
+                            {historyItems.map((item) => {
+                              const winningAmount = item.winningBid?.amount || item.currentBid || 0;
+                              const isSold = item.status === 'SOLD' || (item.winningBidId || item.winningBid);
+                              const winnerName = item.winningBid?.bidder?.name || 'Verified Buyer';
+
+                              return (
+                                <tr key={item.id} className="hover:bg-gray-50 transition-colors">
+                                  <td className="px-6 py-4 whitespace-nowrap">
+                                    <div className="flex items-center">
+                                      <div className="w-10 h-10 rounded-lg bg-emerald-50 text-emerald-600 flex items-center justify-center font-bold text-sm mr-3 border border-emerald-200 flex-shrink-0">
+                                        <Package className="w-5 h-5" />
+                                      </div>
+                                      <div>
+                                        <p className="font-semibold text-gray-900 text-sm">{item.title}</p>
+                                        <p className="text-xs text-gray-500">{item.category} • {item.grade || 'Grade A'}</p>
+                                      </div>
+                                    </div>
+                                  </td>
+                                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-700">
+                                    <span className="font-medium">{item.quantity}</span> {item.unit || 'kg'}
+                                  </td>
+                                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                                    ₹{item.basePrice?.toLocaleString()}
+                                  </td>
+                                  <td className="px-6 py-4 whitespace-nowrap">
+                                    {isSold ? (
+                                      <span className="text-sm font-bold text-emerald-700 bg-emerald-50 px-2.5 py-1 rounded-md border border-emerald-200">
+                                        ₹{Number(winningAmount).toLocaleString()}
+                                      </span>
+                                    ) : (
+                                      <span className="text-sm text-gray-400 italic">No winning bid</span>
+                                    )}
+                                  </td>
+                                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-700">
+                                    {isSold ? (
+                                      <div className="flex items-center gap-1.5">
+                                        <Award className="w-4 h-4 text-amber-500" />
+                                        <span className="font-semibold text-gray-900">{winnerName}</span>
+                                      </div>
+                                    ) : (
+                                      <span className="text-xs text-gray-400">Unsold</span>
+                                    )}
+                                  </td>
+                                  <td className="px-6 py-4 whitespace-nowrap">
+                                    <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold ${
+                                      isSold
+                                        ? 'bg-emerald-100 text-emerald-800 border border-emerald-300'
+                                        : 'bg-gray-100 text-gray-700'
+                                    }`}>
+                                      {isSold ? 'SOLD' : 'COMPLETED'}
+                                    </span>
+                                  </td>
+                                  <td className="px-6 py-4 whitespace-nowrap text-xs text-gray-500">
+                                    {new Date(item.updatedAt || item.createdAt).toLocaleDateString('en-IN', {
+                                      day: 'numeric',
+                                      month: 'short',
+                                      year: 'numeric'
+                                    })}
+                                  </td>
+                                </tr>
+                              );
+                            })}
+                          </tbody>
+                        </table>
+                      </div>
+                    </div>
+                  )}
                 </div>
-              </div>
-            )}
+              );
+            })()}
 
             {activeTab === 'notifications' && (
               <div>
@@ -1140,6 +1314,150 @@ const FarmerDashboard = () => {
                   </button>
                 </div>
               </form>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Produce Details Modal */}
+      {selectedProduceModal && (
+        <div className="fixed inset-0 z-50 overflow-y-auto bg-black bg-opacity-60 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl max-w-2xl w-full shadow-2xl border border-gray-100 overflow-hidden animate-fadeIn">
+            {/* Modal Header */}
+            <div className="flex justify-between items-center px-6 py-4 border-b border-gray-100 bg-gray-50">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-xl bg-green-100 text-green-700 flex items-center justify-center font-bold">
+                  <Package className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="text-xl font-bold text-gray-900">{selectedProduceModal.title}</h3>
+                  <p className="text-xs text-gray-500">ID: {selectedProduceModal.id}</p>
+                </div>
+              </div>
+              <button
+                onClick={() => setSelectedProduceModal(null)}
+                className="text-gray-400 hover:text-gray-600 p-2 rounded-lg hover:bg-gray-200 transition-colors"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Modal Body */}
+            <div className="p-6 space-y-6 max-h-[75vh] overflow-y-auto">
+              {/* Images */}
+              {selectedProduceModal.images && selectedProduceModal.images.length > 0 && (
+                <div>
+                  <h4 className="text-xs font-semibold uppercase tracking-wider text-gray-500 mb-2">Produce Photos</h4>
+                  <div className="grid grid-cols-3 gap-3">
+                    {selectedProduceModal.images.map((img, idx) => (
+                      <div key={idx} className="h-28 rounded-lg overflow-hidden border border-gray-200 bg-gray-50">
+                        <img src={img} alt={`${selectedProduceModal.title} ${idx + 1}`} className="w-full h-full object-cover" />
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Status and Pricing Grid */}
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+                <div className="bg-gray-50 p-3.5 rounded-xl border border-gray-100">
+                  <span className="text-xs text-gray-500 font-medium">Status</span>
+                  <div className="mt-1">
+                    <span className={`inline-flex px-2 py-0.5 text-xs font-bold rounded-full ${
+                      selectedProduceModal.status === 'SOLD' ? 'bg-emerald-100 text-emerald-800' :
+                      selectedProduceModal.status === 'LIVE' ? 'bg-blue-100 text-blue-800' :
+                      selectedProduceModal.status === 'COMPLETED' ? 'bg-gray-100 text-gray-800' : 'bg-yellow-100 text-yellow-800'
+                    }`}>
+                      {selectedProduceModal.status}
+                    </span>
+                  </div>
+                </div>
+                <div className="bg-gray-50 p-3.5 rounded-xl border border-gray-100">
+                  <span className="text-xs text-gray-500 font-medium">Quantity</span>
+                  <p className="text-base font-bold text-gray-900 mt-1">{selectedProduceModal.quantity} {selectedProduceModal.unit || 'kg'}</p>
+                </div>
+                <div className="bg-gray-50 p-3.5 rounded-xl border border-gray-100">
+                  <span className="text-xs text-gray-500 font-medium">Base Price</span>
+                  <p className="text-base font-bold text-gray-900 mt-1">₹{selectedProduceModal.basePrice?.toLocaleString()}</p>
+                </div>
+                <div className="bg-emerald-50 p-3.5 rounded-xl border border-emerald-100">
+                  <span className="text-xs text-emerald-700 font-medium">
+                    {selectedProduceModal.status === 'SOLD' ? 'Final Sold Price' : 'Current / Winning'}
+                  </span>
+                  <p className="text-base font-bold text-emerald-700 mt-1">
+                    ₹{(selectedProduceModal.winningBid?.amount || selectedProduceModal.currentBid || selectedProduceModal.basePrice)?.toLocaleString()}
+                  </p>
+                </div>
+              </div>
+
+              {/* Specifications */}
+              <div className="border border-gray-100 rounded-xl p-4 bg-white shadow-sm space-y-3">
+                <h4 className="text-xs font-semibold uppercase tracking-wider text-gray-500">Lot Specifications</h4>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-sm">
+                  <div className="flex justify-between py-1.5 border-b border-gray-50">
+                    <span className="text-gray-500">Category:</span>
+                    <span className="font-semibold text-gray-800">{selectedProduceModal.category || 'GENERAL'}</span>
+                  </div>
+                  <div className="flex justify-between py-1.5 border-b border-gray-50">
+                    <span className="text-gray-500">Quality Grade:</span>
+                    <span className="font-semibold text-gray-800">{selectedProduceModal.grade || 'Grade A'}</span>
+                  </div>
+                  <div className="flex justify-between py-1.5 border-b border-gray-50">
+                    <span className="text-gray-500">Pickup Mandi:</span>
+                    <span className="font-semibold text-gray-800">{selectedProduceModal.apmc?.name || selectedProduceModal.pickupLocation || 'APMC Yard'}</span>
+                  </div>
+                  <div className="flex justify-between py-1.5 border-b border-gray-50">
+                    <span className="text-gray-500">Auction Scheduled:</span>
+                    <span className="font-semibold text-gray-800">
+                      {new Date(selectedProduceModal.auctionStartTime).toLocaleDateString('en-IN', {
+                        day: 'numeric',
+                        month: 'short',
+                        year: 'numeric'
+                      })}
+                    </span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Description */}
+              {selectedProduceModal.description && (
+                <div>
+                  <h4 className="text-xs font-semibold uppercase tracking-wider text-gray-500 mb-1">Description</h4>
+                  <p className="text-sm text-gray-700 leading-relaxed bg-gray-50 p-3 rounded-lg border border-gray-100">
+                    {selectedProduceModal.description}
+                  </p>
+                </div>
+              )}
+
+              {/* Winning Bidder Information if Sold */}
+              {selectedProduceModal.winningBid && (
+                <div className="p-4 bg-amber-50 border border-amber-200 rounded-xl">
+                  <h4 className="text-xs font-bold uppercase tracking-wider text-amber-800 mb-2 flex items-center gap-1.5">
+                    <Award className="w-4 h-4 text-amber-600" /> Winning Buyer Details
+                  </h4>
+                  <div className="grid grid-cols-2 gap-2 text-sm">
+                    <div>
+                      <span className="text-xs text-amber-700">Buyer Name:</span>
+                      <p className="font-bold text-gray-900">{selectedProduceModal.winningBid.bidder?.name || 'Verified Buyer'}</p>
+                    </div>
+                    <div>
+                      <span className="text-xs text-amber-700">Winning Bid Amount:</span>
+                      <p className="font-bold text-emerald-700">₹{selectedProduceModal.winningBid.amount?.toLocaleString()}</p>
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* Modal Footer */}
+            <div className="px-6 py-4 bg-gray-50 border-t border-gray-100 flex justify-end">
+              <button
+                type="button"
+                onClick={() => setSelectedProduceModal(null)}
+                className="px-5 py-2 bg-gray-800 text-white rounded-lg font-medium hover:bg-gray-900 transition-colors"
+              >
+                Close
+              </button>
             </div>
           </div>
         </div>

@@ -1523,6 +1523,86 @@ router.get('/user/bids', authenticateToken, async (req, res) => {
   }
 });
 
+// Get single produce/auction details
+router.get('/:id', authenticateToken, async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    const produce = await prisma.produce.findUnique({
+      where: { id },
+      include: {
+        farmer: {
+          select: {
+            id: true,
+            name: true,
+            role: true,
+            location: true,
+            createdAt: true
+          }
+        },
+        apmc: {
+          select: {
+            id: true,
+            name: true,
+            location: true
+          }
+        },
+        winningBid: {
+          include: {
+            bidder: {
+              select: {
+                id: true,
+                name: true,
+                role: true
+              }
+            }
+          }
+        },
+        bids: {
+          orderBy: { amount: 'desc' },
+          include: {
+            bidder: {
+              select: {
+                id: true,
+                name: true
+              }
+            }
+          }
+        },
+        session: {
+          select: {
+            id: true,
+            title: true,
+            status: true,
+            startTime: true,
+            endTime: true
+          }
+        }
+      }
+    });
+
+    if (!produce) {
+      return res.status(404).json({
+        success: false,
+        message: 'Produce not found'
+      });
+    }
+
+    parseImages(produce);
+
+    res.json({
+      success: true,
+      data: produce
+    });
+  } catch (error) {
+    console.error('Get produce details error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to fetch produce details'
+    });
+  }
+});
+
 // Delete produce (farmers only) - can only delete UPCOMING or unsold COMPLETED/CANCELLED produce
 router.delete('/:id', authenticateToken, authorizeRoles('FARMER'), async (req, res) => {
   try {
@@ -1714,10 +1794,17 @@ router.get('/farmer/auctions', authenticateToken, authorizeRoles('FARMER'), asyn
       where,
       include: {
         apmc: { select: { name: true, location: true } },
+        winningBid: {
+          include: {
+            bidder: { select: { id: true, name: true, email: true } }
+          }
+        },
         bids: {
-          where: { status: 'ACTIVE' },
           orderBy: { amount: 'desc' },
-          take: 1
+          take: 5,
+          include: {
+            bidder: { select: { id: true, name: true } }
+          }
         },
         _count: { select: { bids: true } }
       },

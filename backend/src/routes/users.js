@@ -115,7 +115,9 @@ router.get('/dashboard-stats', authenticateToken, async (req, res) => {
         totalAuctions,
         liveAuctions,
         completedAuctions,
-        totalEarnings,
+        soldProduceCount,
+        totalEarningsOrders,
+        wonBidsEarnings,
         pendingOrders
       ] = await Promise.all([
         prisma.produce.count({ where: { farmerId: req.user.id } }),
@@ -128,13 +130,28 @@ router.get('/dashboard-stats', authenticateToken, async (req, res) => {
         prisma.produce.count({
           where: {
             farmerId: req.user.id,
-            status: 'COMPLETED'
+            status: { in: ['COMPLETED', 'SOLD'] }
+          }
+        }),
+        prisma.produce.count({
+          where: {
+            farmerId: req.user.id,
+            status: 'SOLD'
           }
         }),
         prisma.order.aggregate({
           where: {
             farmerId: req.user.id,
-            status: { in: ['CONFIRMED', 'DELIVERED'] }
+            status: { in: ['CONFIRMED', 'DELIVERED', 'SHIPPED'] }
+          },
+          _sum: { amount: true }
+        }),
+        prisma.bid.aggregate({
+          where: {
+            status: 'WON',
+            produce: {
+              farmerId: req.user.id
+            }
           },
           _sum: { amount: true }
         }),
@@ -146,11 +163,17 @@ router.get('/dashboard-stats', authenticateToken, async (req, res) => {
         })
       ]);
 
+      const calculatedEarnings = Math.max(
+        totalEarningsOrders._sum.amount || 0,
+        wonBidsEarnings._sum.amount || 0
+      );
+
       stats = {
         totalAuctions,
         liveAuctions,
         completedAuctions,
-        totalEarnings: totalEarnings._sum.amount || 0,
+        soldProduceCount,
+        totalEarnings: calculatedEarnings,
         pendingOrders
       };
 
