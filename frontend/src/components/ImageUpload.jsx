@@ -97,22 +97,32 @@ export default function ImageUpload({ onImagesUploaded, maxImages = 5, uploadTyp
                 }
             });
 
-            if (response.data.success) {
-                const imageUrls = uploadType === 'profile'
-                    ? [response.data.data.url]
-                    : response.data.data.images.map(img => img.url);
+            const resData = response?.data || response;
 
-                onImagesUploaded(imageUrls);
-                toast.success(`${selectedFiles.length} image(s) uploaded successfully`);
+            if (resData && (resData.success || resData.images)) {
+                let imageUrls = [];
+                if (uploadType === 'profile') {
+                    imageUrls = [resData.data?.url || resData.url].filter(Boolean);
+                } else {
+                    const rawList = resData.data?.images || resData.images || [];
+                    imageUrls = rawList.map(img => (typeof img === 'string' ? img : img?.url || '')).filter(Boolean);
+                }
 
-                // Clear selections
-                setSelectedFiles([]);
-                setPreviews([]);
-                setUploadProgress(0);
+                if (imageUrls.length > 0) {
+                    onImagesUploaded(imageUrls);
+                    toast.success(`${imageUrls.length} image(s) uploaded successfully!`);
+                    setSelectedFiles([]);
+                    setPreviews([]);
+                    setUploadProgress(0);
+                } else {
+                    toast.error('No image URLs returned from upload');
+                }
+            } else {
+                toast.error(resData?.message || 'Failed to upload images');
             }
         } catch (error) {
             console.error('Image upload error:', error);
-            toast.error(error.response?.data?.message || 'Failed to upload images');
+            toast.error(error.response?.data?.message || error.message || 'Failed to upload images');
         } finally {
             setUploading(false);
         }

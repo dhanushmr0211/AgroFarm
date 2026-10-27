@@ -41,6 +41,29 @@ import { toast } from 'react-hot-toast';
 
 const TURN_DURATION_SECONDS = 300; // 5 minutes
 
+// Produce fallback image catalog by produce title / category
+const PRODUCE_FALLBACK_IMAGES = {
+  'Tomato': 'https://images.unsplash.com/photo-1592924357228-91a4daadcfea?auto=format&fit=crop&w=800&q=80',
+  'Onion': 'https://images.unsplash.com/photo-1618512496248-a07fe83aa8cb?auto=format&fit=crop&w=800&q=80',
+  'Potato': 'https://images.unsplash.com/photo-1518977676601-b53f82aba655?auto=format&fit=crop&w=800&q=80',
+  'Beans': 'https://images.unsplash.com/photo-1551893665-f843f600794e?auto=format&fit=crop&w=800&q=80',
+  'Wheat': 'https://images.unsplash.com/photo-1574323347407-f5e1ad6d020b?auto=format&fit=crop&w=800&q=80',
+  'Rice': 'https://images.unsplash.com/photo-1586201375761-83865001e31c?auto=format&fit=crop&w=800&q=80',
+  'Cotton': 'https://images.unsplash.com/photo-1606041008023-472dfb5e530f?auto=format&fit=crop&w=800&q=80',
+  'Sugarcane': 'https://images.unsplash.com/photo-1594489428504-5c0c480a15fd?auto=format&fit=crop&w=800&q=80',
+  'Carrot': 'https://images.unsplash.com/photo-1598170845058-32b9d6a5da37?auto=format&fit=crop&w=800&q=80',
+  'Chilli': 'https://images.unsplash.com/photo-1588252303782-cb80119abd6d?auto=format&fit=crop&w=800&q=80'
+};
+
+const getDefaultProduceImage = (title, category) => {
+  if (!title && !category) return 'https://images.unsplash.com/photo-1542838132-92c53300491e?auto=format&fit=crop&w=800&q=80';
+  const matchedKey = Object.keys(PRODUCE_FALLBACK_IMAGES).find(k =>
+    (title && title.toLowerCase().includes(k.toLowerCase())) ||
+    (category && category.toLowerCase().includes(k.toLowerCase()))
+  );
+  return matchedKey ? PRODUCE_FALLBACK_IMAGES[matchedKey] : 'https://images.unsplash.com/photo-1542838132-92c53300491e?auto=format&fit=crop&w=800&q=80';
+};
+
 // Robust helper to extract image URLs regardless of format (array, JSON, double-stringified, single URL)
 const extractImages = (rawImages) => {
   if (!rawImages) return [];
@@ -129,7 +152,8 @@ const LiveBidding = () => {
       const queueData = data.queue || [];
       // Clean and normalize all queue produce images
       queueData.forEach(p => {
-        p.images = extractImages(p.images);
+        const extracted = extractImages(p.images);
+        p.images = extracted.length > 0 ? extracted : [getDefaultProduceImage(p.title, p.category)];
       });
       setQueue(queueData);
       setTotalTurns(data.totalTurns || queueData.length);
@@ -137,7 +161,8 @@ const LiveBidding = () => {
 
       const active = data.activeProduce;
       if (active) {
-        active.images = extractImages(active.images);
+        const extracted = extractImages(active.images);
+        active.images = extracted.length > 0 ? extracted : [getDefaultProduceImage(active.title, active.category)];
         setActiveProduce(active);
         const highestBid = active.bids?.[0]?.amount || active.currentBid || active.basePrice || 0;
         setCurrentBid(highestBid);

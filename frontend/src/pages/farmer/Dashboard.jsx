@@ -7,6 +7,58 @@ import toast from 'react-hot-toast'
 import ImageUpload from '../../components/ImageUpload'
 
 
+// Produce fallback image catalog by produce title / category
+const PRODUCE_FALLBACK_IMAGES = {
+  'Tomato': 'https://images.unsplash.com/photo-1592924357228-91a4daadcfea?auto=format&fit=crop&w=800&q=80',
+  'Onion': 'https://images.unsplash.com/photo-1618512496248-a07fe83aa8cb?auto=format&fit=crop&w=800&q=80',
+  'Potato': 'https://images.unsplash.com/photo-1518977676601-b53f82aba655?auto=format&fit=crop&w=800&q=80',
+  'Beans': 'https://images.unsplash.com/photo-1551893665-f843f600794e?auto=format&fit=crop&w=800&q=80',
+  'Wheat': 'https://images.unsplash.com/photo-1574323347407-f5e1ad6d020b?auto=format&fit=crop&w=800&q=80',
+  'Rice': 'https://images.unsplash.com/photo-1586201375761-83865001e31c?auto=format&fit=crop&w=800&q=80',
+  'Cotton': 'https://images.unsplash.com/photo-1606041008023-472dfb5e530f?auto=format&fit=crop&w=800&q=80',
+  'Sugarcane': 'https://images.unsplash.com/photo-1594489428504-5c0c480a15fd?auto=format&fit=crop&w=800&q=80',
+  'Carrot': 'https://images.unsplash.com/photo-1598170845058-32b9d6a5da37?auto=format&fit=crop&w=800&q=80',
+  'Chilli': 'https://images.unsplash.com/photo-1588252303782-cb80119abd6d?auto=format&fit=crop&w=800&q=80'
+}
+
+const getDefaultProduceImage = (title, category) => {
+  if (!title && !category) return 'https://images.unsplash.com/photo-1542838132-92c53300491e?auto=format&fit=crop&w=800&q=80'
+  const matchedKey = Object.keys(PRODUCE_FALLBACK_IMAGES).find(k =>
+    (title && title.toLowerCase().includes(k.toLowerCase())) ||
+    (category && category.toLowerCase().includes(k.toLowerCase()))
+  )
+  return matchedKey ? PRODUCE_FALLBACK_IMAGES[matchedKey] : 'https://images.unsplash.com/photo-1542838132-92c53300491e?auto=format&fit=crop&w=800&q=80'
+}
+
+const extractImages = (rawImages) => {
+  if (!rawImages) return []
+  if (Array.isArray(rawImages)) {
+    return rawImages.map(img => (typeof img === 'string' ? img : img?.url || '')).filter(Boolean)
+  }
+  if (typeof rawImages === 'string') {
+    try {
+      let parsed = JSON.parse(rawImages)
+      if (typeof parsed === 'string') {
+        try { parsed = JSON.parse(parsed) } catch (_) {}
+      }
+      if (Array.isArray(parsed)) {
+        return parsed.map(img => (typeof img === 'string' ? img : img?.url || '')).filter(Boolean)
+      }
+      if (typeof parsed === 'string' && (parsed.startsWith('http') || parsed.startsWith('data:') || parsed.startsWith('/'))) {
+        return [parsed]
+      }
+    } catch {
+      if (rawImages.includes(',')) {
+        return rawImages.split(',').map(s => s.trim()).filter(Boolean)
+      }
+      if (rawImages.startsWith('http') || rawImages.startsWith('data:') || rawImages.startsWith('/')) {
+        return [rawImages]
+      }
+    }
+  }
+  return []
+}
+
 const FarmerDashboard = () => {
   const { user } = useAuth()
   const navigate = useNavigate()
@@ -635,22 +687,48 @@ const FarmerDashboard = () => {
                       const canDelete = !isSold && !isLive;
 
                       return (
-                        <div key={produce.id} className="bg-white border border-gray-200 rounded-lg p-6 shadow-sm hover:shadow-md transition-shadow flex flex-col justify-between">
+                        <div key={produce.id} className="bg-white border border-gray-200 rounded-xl overflow-hidden shadow-sm hover:shadow-md transition-shadow flex flex-col justify-between group">
                           <div>
-                            <div className="flex justify-between items-start mb-4">
-                              <h3 className="text-lg font-semibold text-gray-900">{produce.title}</h3>
-                              <span className={`text-xs font-semibold px-2.5 py-0.5 rounded-full ${
-                                isSold
-                                  ? 'bg-emerald-100 text-emerald-800 border border-emerald-300'
-                                  : isLive
-                                    ? 'bg-blue-100 text-blue-800 animate-pulse'
-                                    : produce.status === 'UPCOMING'
-                                      ? 'bg-yellow-100 text-yellow-800'
-                                      : 'bg-gray-100 text-gray-800'
-                              }`}>
-                                {isSold ? 'SOLD' : produce.status}
-                              </span>
-                            </div>
+                            {/* Card Image Banner */}
+                            {(() => {
+                              const photos = extractImages(produce.images);
+                              const cardImage = photos.length > 0 ? photos[0] : getDefaultProduceImage(produce.title, produce.category);
+
+                              return (
+                                <div className="h-40 w-full overflow-hidden bg-gray-100 relative">
+                                  <img
+                                    src={cardImage}
+                                    alt={produce.title}
+                                    className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-105"
+                                    onError={(e) => {
+                                      e.target.onerror = null;
+                                      e.target.src = getDefaultProduceImage(produce.title, produce.category);
+                                    }}
+                                  />
+                                  <div className="absolute top-2.5 right-2.5">
+                                    <span className={`text-xs font-semibold px-2.5 py-0.5 rounded-full shadow-sm ${
+                                      isSold
+                                        ? 'bg-emerald-100 text-emerald-800 border border-emerald-300'
+                                        : isLive
+                                          ? 'bg-blue-100 text-blue-800 animate-pulse'
+                                          : produce.status === 'UPCOMING'
+                                            ? 'bg-yellow-100 text-yellow-800'
+                                            : 'bg-gray-100 text-gray-800'
+                                    }`}>
+                                      {isSold ? 'SOLD' : produce.status}
+                                    </span>
+                                  </div>
+                                </div>
+                              );
+                            })()}
+
+                            <div className="p-5">
+                              <div className="flex justify-between items-start mb-3">
+                                <div>
+                                  <h3 className="text-lg font-bold text-gray-900">{produce.title}</h3>
+                                  <p className="text-xs text-gray-500">{produce.category}</p>
+                                </div>
+                              </div>
                             <div className="space-y-2 text-sm text-gray-600">
                               <div className="flex justify-between">
                                 <span>Quantity:</span>
@@ -683,9 +761,10 @@ const FarmerDashboard = () => {
                                 </div>
                               </div>
                             )}
+                            </div>
                           </div>
                           {/* Action buttons */}
-                          <div className="mt-5 pt-4 border-t border-gray-100 flex items-center justify-between">
+                          <div className="mt-5 pt-4 border-t border-gray-100 flex items-center justify-between px-5 pb-5">
                             {canDelete ? (
                               <button
                                 onClick={() => handleDeleteProduce(produce.id, produce.title)}
@@ -1344,19 +1423,41 @@ const FarmerDashboard = () => {
 
             {/* Modal Body */}
             <div className="p-6 space-y-6 max-h-[75vh] overflow-y-auto">
-              {/* Images */}
-              {selectedProduceModal.images && selectedProduceModal.images.length > 0 && (
-                <div>
-                  <h4 className="text-xs font-semibold uppercase tracking-wider text-gray-500 mb-2">Produce Photos</h4>
-                  <div className="grid grid-cols-3 gap-3">
-                    {selectedProduceModal.images.map((img, idx) => (
-                      <div key={idx} className="h-28 rounded-lg overflow-hidden border border-gray-200 bg-gray-50">
-                        <img src={img} alt={`${selectedProduceModal.title} ${idx + 1}`} className="w-full h-full object-cover" />
-                      </div>
-                    ))}
+              {/* Produce Photos with Auto-Fallback */}
+              {(() => {
+                const photos = extractImages(selectedProduceModal.images);
+                const displayPhotos = photos.length > 0 
+                  ? photos 
+                  : [getDefaultProduceImage(selectedProduceModal.title, selectedProduceModal.category)];
+
+                return (
+                  <div>
+                    <div className="flex justify-between items-center mb-2">
+                      <h4 className="text-xs font-semibold uppercase tracking-wider text-gray-500">Produce Photos</h4>
+                      {photos.length === 0 && (
+                        <span className="text-[11px] text-amber-600 bg-amber-50 px-2 py-0.5 rounded border border-amber-200">
+                          Standard Quality Reference Photo
+                        </span>
+                      )}
+                    </div>
+                    <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+                      {displayPhotos.map((img, idx) => (
+                        <div key={idx} className="h-32 rounded-xl overflow-hidden border border-gray-200 bg-gray-50 shadow-sm relative group">
+                          <img
+                            src={img}
+                            alt={`${selectedProduceModal.title} ${idx + 1}`}
+                            className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-105"
+                            onError={(e) => {
+                              e.target.onerror = null;
+                              e.target.src = getDefaultProduceImage(selectedProduceModal.title, selectedProduceModal.category);
+                            }}
+                          />
+                        </div>
+                      ))}
+                    </div>
                   </div>
-                </div>
-              )}
+                );
+              })()}
 
               {/* Status and Pricing Grid */}
               <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
