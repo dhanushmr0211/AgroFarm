@@ -69,7 +69,13 @@ router.get('/my-booking-requests', authenticateToken, authorizeRoles('FARMER', '
 // Get all sessions (Admin, Farmer, Buyer) - MOVED TO TOP
 router.get('/sessions', authenticateToken, authorizeRoles('ADMIN', 'FARMER', 'BUYER'), async (req, res) => {
   try {
+    const { status, apmcId } = req.query;
+    const where = {};
+    if (status) where.status = status;
+    if (apmcId) where.apmcId = apmcId;
+
     const sessions = await prisma.auctionSession.findMany({
+      where: Object.keys(where).length > 0 ? where : undefined,
       include: {
         apmc: { select: { name: true, location: true } },
         registrations: { select: { id: true } },
@@ -81,12 +87,13 @@ router.get('/sessions', authenticateToken, authorizeRoles('ADMIN', 'FARMER', 'BU
     const sessionsWithCounts = sessions.map(session => ({
       ...session,
       participants: session.registrations,
+      participantCount: session._count?.registrations || session.registrations?.length || 0,
       // Computed fields for frontend display
-      title: `${session.apmc.name} Auction Session`,
-      description: `Auction session at ${session.apmc.name}`,
+      title: `${session.apmc?.name || 'APMC'} Auction Session`,
+      description: `Auction session at ${session.apmc?.name || 'APMC'}`,
       dateTime: session.startTime,
       duration: Math.round((new Date(session.endTime) - new Date(session.startTime)) / 60000), // Duration in minutes
-      maxParticipants: session.capacityFarmers + session.capacityBuyers
+      maxParticipants: (session.capacityFarmers || 0) + (session.capacityBuyers || 0)
     }));
 
     res.json(sessionsWithCounts);

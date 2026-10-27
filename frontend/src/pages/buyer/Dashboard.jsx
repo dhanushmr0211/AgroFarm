@@ -377,7 +377,7 @@ const Dashboard = () => {
                         <div className="space-y-2 mb-4">
                           <div className="flex justify-between">
                             <span className="text-sm text-gray-600">Location:</span>
-                            <span className="text-sm font-medium">{session.apmc?.location}</span>
+                            <span className="text-sm font-medium">{session.apmc?.location || 'N/A'}</span>
                           </div>
                           <div className="flex justify-between">
                             <span className="text-sm text-gray-600">Category:</span>
@@ -385,7 +385,11 @@ const Dashboard = () => {
                           </div>
                           <div className="flex justify-between">
                             <span className="text-sm text-gray-600">Active Participants:</span>
-                            <span className="text-sm font-medium">{session.participants || 0}</span>
+                            <span className="text-sm font-medium">
+                              {Array.isArray(session.participants)
+                                ? session.participants.length
+                                : (session._count?.registrations || session.participants || 0)}
+                            </span>
                           </div>
                           <div className="flex justify-between">
                             <span className="text-sm text-gray-600">End Time:</span>
@@ -395,8 +399,8 @@ const Dashboard = () => {
                           </div>
                         </div>
                         <button
-                          onClick={() => navigate(`/live-auction/${session.id}`)}
-                          className="w-full bg-green-600 text-white py-2 px-4 rounded-lg hover:bg-green-700 transition-colors font-medium"
+                          onClick={() => navigate(`/session/${session.id}`)}
+                          className="w-full bg-green-600 text-white py-2 px-4 rounded-lg hover:bg-green-700 transition-colors font-medium shadow-sm hover:shadow"
                         >
                           Join Session
                         </button>
