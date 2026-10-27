@@ -160,7 +160,8 @@ router.get('/dashboard-stats', authenticateToken, async (req, res) => {
         totalBids,
         wonBids,
         activeBids,
-        totalSpent,
+        totalSpentOrders,
+        wonBidsTotal,
         pendingOrders
       ] = await Promise.all([
         prisma.bid.count({ where: { bidderId: req.user.id } }),
@@ -179,7 +180,14 @@ router.get('/dashboard-stats', authenticateToken, async (req, res) => {
         prisma.order.aggregate({
           where: {
             buyerId: req.user.id,
-            status: { in: ['CONFIRMED', 'DELIVERED'] }
+            status: { in: ['CONFIRMED', 'DELIVERED', 'SHIPPED'] }
+          },
+          _sum: { amount: true }
+        }),
+        prisma.bid.aggregate({
+          where: {
+            bidderId: req.user.id,
+            status: 'WON'
           },
           _sum: { amount: true }
         }),
@@ -191,12 +199,17 @@ router.get('/dashboard-stats', authenticateToken, async (req, res) => {
         })
       ]);
 
+      const calculatedSpent = Math.max(
+        totalSpentOrders._sum.amount || 0,
+        wonBidsTotal._sum.amount || 0
+      );
+
       stats = {
         totalBids,
         wonBids,
         activeBids,
-        totalSpent: totalSpent._sum.amount || 0,
-        pendingOrders
+        totalSpent: calculatedSpent,
+        pendingOrders: pendingOrders || wonBids
       };
 
     } else if (req.user.role === 'ADMIN') {
@@ -255,6 +268,39 @@ router.get('/orders', authenticateToken, async (req, res) => {
   try {
     const { page = 1, limit = 10, status } = req.query;
     const skip = (page - 1) * limit;
+
+    // Auto-create orders for any won bids that don't have an order record yet
+    if (req.user.role === 'BUYER') {
+      try {
+        const wonBidsWithoutOrders = await prisma.bid.findMany({
+          where: {
+            bidderId: req.user.id,
+            status: 'WON',
+            orders: { none: {} }
+          },
+          include: { produce: true }
+        });
+
+        for (const wonBid of wonBidsWithoutOrders) {
+          if (wonBid.produce) {
+            await prisma.order.create({
+              data: {
+                buyerId: req.user.id,
+                farmerId: wonBid.produce.farmerId,
+                produceId: wonBid.produce.id,
+                bidId: wonBid.id,
+                quantity: wonBid.quantity || wonBid.produce.quantity,
+                amount: wonBid.amount,
+                status: 'CONFIRMED',
+                deliveryAddress: req.user.address || 'APMC Mandi Lot Pickup'
+              }
+            });
+          }
+        }
+      } catch (syncErr) {
+        console.error('Order sync error:', syncErr);
+      }
+    }
 
     const where = {
       ...(req.user.role === 'BUYER' ? { buyerId: req.user.id } : { farmerId: req.user.id }),

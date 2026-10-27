@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import api from '../../api';
 import { useAuth } from '../../contexts/AuthContext';
 import { toast } from 'react-hot-toast';
-import { Gavel, Trophy, Wallet, BarChart3, Calendar, Radio } from 'lucide-react';
+import { Gavel, Trophy, Wallet, BarChart3, Calendar, Radio, RefreshCw } from 'lucide-react';
 
 const Dashboard = () => {
   const navigate = useNavigate();
@@ -33,31 +33,39 @@ const Dashboard = () => {
 
       // Fetch Stats
       const statsRes = await api.get('/users/dashboard-stats');
-      if (statsRes.data.success) {
-        const s = statsRes.data.data;
-        // Calculate success rate
-        const total = s.activeBids + s.wonBids; // Crude approximation
-        const rate = total > 0 ? Math.round((s.wonBids / s.totalBids) * 100) : 0;
+      const s = statsRes?.data || statsRes || {};
+      const totalBids = s.totalBids || (s.activeBids + s.wonBids) || 0;
+      const wonBids = s.wonBids || 0;
+      const rate = totalBids > 0 ? Math.round((wonBids / totalBids) * 100) : (wonBids > 0 ? 100 : 0);
 
-        setStats({
-          activeBids: s.activeBids || 0,
-          wonBids: s.wonBids || 0,
-          totalSpent: s.totalSpent || 0,
-          successRate: `${rate}%`
-        });
-      }
+      setStats({
+        activeBids: s.activeBids || 0,
+        wonBids: s.wonBids || 0,
+        totalSpent: s.totalSpent || 0,
+        successRate: `${rate}%`
+      });
 
       // Fetch Active Bids
       const bidsRes = await api.get('/auctions/user/bids?status=ACTIVE');
-      if (bidsRes.data.success) {
-        setActiveBids(bidsRes.data.data || []);
-      }
+      const bidsList = Array.isArray(bidsRes)
+        ? bidsRes
+        : (bidsRes?.data && Array.isArray(bidsRes.data))
+        ? bidsRes.data
+        : (bidsRes?.data?.data && Array.isArray(bidsRes.data.data))
+        ? bidsRes.data.data
+        : [];
+      setActiveBids(bidsList);
 
       // Fetch Won Auctions (Orders)
       const ordersRes = await api.get('/users/orders');
-      if (ordersRes.data.success) {
-        setWonAuctions(ordersRes.data.data || []);
-      }
+      const ordersList = Array.isArray(ordersRes)
+        ? ordersRes
+        : (ordersRes?.data && Array.isArray(ordersRes.data))
+        ? ordersRes.data
+        : (ordersRes?.data?.data && Array.isArray(ordersRes.data.data))
+        ? ordersRes.data.data
+        : [];
+      setWonAuctions(ordersList);
 
       // Fetch Live Sessions
       const liveRes = await api.get('/auctions/sessions?status=LIVE');
@@ -119,9 +127,21 @@ const Dashboard = () => {
     <div className="min-h-screen bg-gray-50 p-6">
       <div className="max-w-7xl mx-auto">
         {/* Header */}
-        <div className="mb-8">
-          <h1 className="text-3xl font-bold text-gray-900">Buyer Dashboard</h1>
-          <p className="text-gray-600 mt-2">Welcome back, {user?.name}</p>
+        <div className="mb-8 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+          <div>
+            <h1 className="text-3xl font-bold text-gray-900">Buyer Dashboard</h1>
+            <p className="text-gray-600 mt-2">Welcome back, {user?.name}</p>
+          </div>
+          <button
+            onClick={() => {
+              fetchDashboardData();
+              toast.success('Stats refreshed!');
+            }}
+            className="self-start sm:self-auto inline-flex items-center gap-2 px-4 py-2 bg-white hover:bg-gray-100 text-gray-700 text-sm font-medium rounded-lg border border-gray-300 shadow-sm transition"
+          >
+            <RefreshCw className="h-4 w-4 text-gray-500" />
+            <span>Refresh Stats</span>
+          </button>
         </div>
 
         {/* Stats Grid */}
@@ -306,11 +326,11 @@ const Dashboard = () => {
                         {wonAuctions.map((order) => (
                           <tr key={order.id} className="hover:bg-gray-50">
                             <td className="px-6 py-4 whitespace-nowrap">
-                              <div className="text-sm font-medium text-gray-900">{order.produce?.title}</div>
+                              <div className="text-sm font-medium text-gray-900">{order.produce?.title || 'Produce Lot'}</div>
                             </td>
-                            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{order.produce?.quantity} {order.produce?.unit}</td>
+                            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{(order.quantity || order.produce?.quantity || '-')} {order.produce?.unit || 'kg'}</td>
                             <td className="px-6 py-4 whitespace-nowrap">
-                              <div className="text-sm font-medium text-gray-900">{formatCurrency(order.bid?.amount || 0)}</div>
+                              <div className="text-sm font-medium text-gray-900">{formatCurrency(order.amount || order.bid?.amount || 0)}</div>
                             </td>
                             <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{new Date(order.createdAt).toLocaleDateString()}</td>
                             <td className="px-6 py-4 whitespace-nowrap">

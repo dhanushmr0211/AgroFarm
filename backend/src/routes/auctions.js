@@ -846,6 +846,14 @@ router.post('/sessions/:id/accept-turn', authenticateToken, async (req, res) => 
         where: { id: highestBid.id },
         data: { status: 'WON' }
       });
+      await prisma.bid.updateMany({
+        where: {
+          produceId: activeProduce.id,
+          id: { not: highestBid.id },
+          status: 'ACTIVE'
+        },
+        data: { status: 'LOST' }
+      });
       await prisma.produce.update({
         where: { id: activeProduce.id },
         data: {
@@ -853,6 +861,33 @@ router.post('/sessions/:id/accept-turn', authenticateToken, async (req, res) => 
           winningBidId: highestBid.id
         }
       });
+
+      // Create confirmed order for the winning buyer
+      try {
+        const existingOrder = await prisma.order.findUnique({
+          where: { bidId: highestBid.id }
+        });
+        if (!existingOrder) {
+          const buyerUser = await prisma.user.findUnique({
+            where: { id: highestBid.bidderId },
+            select: { address: true }
+          });
+          await prisma.order.create({
+            data: {
+              buyerId: highestBid.bidderId,
+              farmerId: activeProduce.farmerId,
+              produceId: activeProduce.id,
+              bidId: highestBid.id,
+              quantity: activeProduce.quantity,
+              amount: highestBid.amount,
+              status: 'CONFIRMED',
+              deliveryAddress: buyerUser?.address || 'APMC Mandi Lot Pickup'
+            }
+          });
+        }
+      } catch (orderErr) {
+        console.error('Order creation error on accept-turn:', orderErr);
+      }
     } else {
       await prisma.produce.update({
         where: { id: activeProduce.id },
@@ -958,7 +993,13 @@ router.post('/sessions/:id/timeout-turn', authenticateToken, async (req, res) =>
     const activeProduce = await prisma.produce.findFirst({
       where: { sessionId: id, status: 'LIVE' },
       include: {
-        farmer: { select: { id: true, name: true } }
+        farmer: { select: { id: true, name: true } },
+        bids: {
+          where: { status: 'ACTIVE' },
+          orderBy: { amount: 'desc' },
+          take: 1,
+          include: { bidder: { select: { id: true, name: true } } }
+        }
       }
     });
 
@@ -966,11 +1007,59 @@ router.post('/sessions/:id/timeout-turn', authenticateToken, async (req, res) =>
       return res.status(400).json({ success: false, message: 'No active farmer lot currently live' });
     }
 
-    // Mark current produce completed without selling
-    await prisma.produce.update({
-      where: { id: activeProduce.id },
-      data: { status: 'COMPLETED' }
-    });
+    const highestBid = activeProduce.bids && activeProduce.bids.length > 0 ? activeProduce.bids[0] : null;
+
+    if (highestBid) {
+      // Award to highest bidder on timeout
+      await prisma.bid.update({
+        where: { id: highestBid.id },
+        data: { status: 'WON' }
+      });
+      await prisma.bid.updateMany({
+        where: {
+          produceId: activeProduce.id,
+          id: { not: highestBid.id },
+          status: 'ACTIVE'
+        },
+        data: { status: 'LOST' }
+      });
+      await prisma.produce.update({
+        where: { id: activeProduce.id },
+        data: { status: 'SOLD', winningBidId: highestBid.id }
+      });
+
+      try {
+        const existingOrder = await prisma.order.findUnique({
+          where: { bidId: highestBid.id }
+        });
+        if (!existingOrder) {
+          const buyerUser = await prisma.user.findUnique({
+            where: { id: highestBid.bidderId },
+            select: { address: true }
+          });
+          await prisma.order.create({
+            data: {
+              buyerId: highestBid.bidderId,
+              farmerId: activeProduce.farmerId,
+              produceId: activeProduce.id,
+              bidId: highestBid.id,
+              quantity: activeProduce.quantity,
+              amount: highestBid.amount,
+              status: 'CONFIRMED',
+              deliveryAddress: buyerUser?.address || 'APMC Mandi Lot Pickup'
+            }
+          });
+        }
+      } catch (orderErr) {
+        console.error('Order creation error on timeout-turn:', orderErr);
+      }
+    } else {
+      // Mark current produce completed without selling
+      await prisma.produce.update({
+        where: { id: activeProduce.id },
+        data: { status: 'COMPLETED' }
+      });
+    }
 
     // Find next upcoming produce
     const nextProduce = await prisma.produce.findFirst({
@@ -996,13 +1085,21 @@ router.post('/sessions/:id/timeout-turn', authenticateToken, async (req, res) =>
         }
       });
 
-      announcementMessage = `Farmer ${activeProduce.farmer.name}'s turn ended without selling. Now Farmer ${nextProduce.farmer.name}'s turn for ${nextProduce.title} (5 mins remaining).`;
+      if (highestBid) {
+        announcementMessage = `Timer ended for Farmer ${activeProduce.farmer.name}'s ${activeProduce.title}. Sold to ${highestBid.bidder?.name || 'highest bidder'} for ₹${highestBid.amount}! Now Farmer ${nextProduce.farmer.name}'s turn (5 mins).`;
+      } else {
+        announcementMessage = `Farmer ${activeProduce.farmer.name}'s turn ended without selling. Now Farmer ${nextProduce.farmer.name}'s turn for ${nextProduce.title} (5 mins remaining).`;
+      }
     } else {
       await prisma.auctionSession.update({
         where: { id },
         data: { status: 'COMPLETED' }
       });
-      announcementMessage = `Farmer ${activeProduce.farmer.name}'s turn ended without selling. All farmer lots in this session have concluded.`;
+      if (highestBid) {
+        announcementMessage = `Timer ended for Farmer ${activeProduce.farmer.name}'s ${activeProduce.title}. Sold to ${highestBid.bidder?.name || 'highest bidder'} for ₹${highestBid.amount}! All farmer lots in this session have concluded.`;
+      } else {
+        announcementMessage = `Farmer ${activeProduce.farmer.name}'s turn ended without selling. All farmer lots in this session have concluded.`;
+      }
     }
 
     // Record system chat announcement
